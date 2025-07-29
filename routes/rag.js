@@ -36,11 +36,11 @@ router.post('/query', async (req, res) => {
         });
         const questionVector = embeddingResponse.data[0].embedding;
 
-        const [articleSearchResults, vectorSearchResults, keywordSearchResults] = await Promise.all([
+        const [articleSearchResults, vectorSearchResults, keywordSearchResults, derivedDataResults] = await Promise.all([
             articleSearchClient.search(question, {
                 vectorQueries: [{
                     vector: questionVector,
-                    kNearestNeighborsCount: 2,
+                    kNearestNeighborsCount: 3,
                     fields: ["content_vector"] 
                 }],
                 speller: 'lexicon'
@@ -58,6 +58,15 @@ router.post('/query', async (req, res) => {
                 const db = getDB();
                 const collection = db.collection('ipeds_colleges');
                 return await collection.find({ $text: { $search: question } }).limit(3).toArray();
+            })(),
+            (async () => {
+                const db = getDB();
+                const collection = db.collection('ipeds_derived_data');
+                const pipeline = [
+                    { $search: { cosmosSearch: { vector: questionVector, path: 'text_vector', k: 3 }, returnStoredSource: true } },
+                    { $project: { score: { $meta: 'searchScore' }, document: '$$ROOT' } }
+                ];
+                return await collection.aggregate(pipeline).toArray();
             })()
         ]);
 
@@ -65,10 +74,10 @@ router.post('/query', async (req, res) => {
 
         let articleContext = "";
         for await (const result of articleSearchResults.results) {
-            articleContext += `[Source: ${result.document.metadata_storage_name || 'article'}] ` + (result.document.content || '') + "\n\n";
+            articleContext += `[Source: ${result.document.metadata_storage_name || 'PDF Article'}] ` + (result.document.content || '') + "\n\n";
         }
         if (articleContext) {
-            context += "--- Context from Curated Research Articles ---\n" + articleContext;
+            context += "--- Context from Curated PDF Articles ---\n" + articleContext;
         }
 
         const combinedDbResults = [...vectorSearchResults.map(r => r.document), ...keywordSearchResults];
@@ -81,16 +90,24 @@ router.post('/query', async (req, res) => {
                                `Admission Rate: ${(doc.admissions?.admission_rate * 100)?.toFixed(1) || 'N/A'}%\n`+
                                `Total Enrollment: ${doc.enrollment?.total?.toLocaleString()}\n\n`;
         }
+        
+        for (const result of derivedDataResults) {
+             const doc = result.document;
+             databaseContext += `[Source: IPEDS Derived Data for Unit ID ${doc.unitid}]\n` +
+                                `Bachelor's Degrees Awarded: ${doc.bachelor_degrees_awarded?.toLocaleString()}\n` +
+                                `Graduation Rate: ${doc.grad_rate_total}%\n\n`;
+        }
+
         if (databaseContext) {
             context += "\n--- Context from IPEDS Database ---\n" + databaseContext;
         }
 
-        const systemPrompt = `You are Scholargy AI, an expert college admissions counselor. You MUST answer questions based ONLY on the provided context from IPEDS data and research articles. If the answer is not in the provided context, you MUST state 'I could not find an answer in the provided documents.' Do not make up information. Be friendly and conversational.`;
+        const systemPrompt = `You are Scholargy AI, a highly knowledgeable and professional AI assistant. You MUST answer questions based ONLY on the provided context from IPEDS data and research articles. If the answer is not in the provided context, you MUST state 'I could not find an answer in the provided documents.' Do not make up information or include URLs. Maintain a formal and objective tone.`;
 
         const messages = [
             { role: "system", content: systemPrompt },
             ...history,
-            { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` }
+            { role: "user", content: `Context:\n${context || "No context found."}\n\nQuestion: ${question}` }
         ];
 
         const chatClient = new OpenAI({

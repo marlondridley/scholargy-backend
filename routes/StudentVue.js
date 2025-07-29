@@ -1,10 +1,3 @@
-// routes/studentvue.js - Defines the API endpoint for fetching data from StudentVue.
-/**
- * @route   POST /api/studentvue/login
- * @desc    Logs into StudentVue, fetches all data, and returns it.
- * Credentials are sent in the request body and are never stored.
- * @access  Private (should be protected by user authentication in a real app)
- */
 const express = require('express');
 const StudentVue = require('studentvue');
 const router = express.Router();

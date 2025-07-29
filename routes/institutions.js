@@ -1,16 +1,17 @@
 // routes/institutions.js - Defines API endpoints related to college data.
-/**
- * @route   POST /api/institutions/search
- * @desc    Handles advanced search requests for institutions.
- * @access  Public
- */
+
 const express = require('express');
 const { getDB } = require('../db');
 const { redisClient } = require('../cache');
 const router = express.Router();
 
-const CACHE_EXPIRATION_SECONDS = 3600;
+const CACHE_EXPIRATION_SECONDS = 3600; // Cache for 1 hour
 
+/**
+ * @route   POST /api/institutions/search
+ * @desc    Handles keyword search requests for institutions.
+ * @access  Public
+ */
 router.post('/search', async (req, res) => {
   const { filters = {}, pagination = { page: 1, limit: 20 }, sortBy = {} } = req.body;
   try {
@@ -32,6 +33,11 @@ router.post('/search', async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/institutions/:id
+ * @desc    Retrieves a single, comprehensive document for a specific institution.
+ * @access  Public
+ */
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const unitIdAsNumber = parseInt(id, 10);

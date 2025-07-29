@@ -1,10 +1,4 @@
 // routes/articles.js - Defines API endpoints for keyword search on articles.
-
-/**
- * @route   GET /api/articles/search
- * @desc    Performs a keyword search on the articles index.
- * @access  Public
- */
 const express = require('express');
 const { SearchClient, AzureKeyCredential } = require("@azure/search-documents");
 const router = express.Router();
