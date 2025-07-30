@@ -76,13 +76,14 @@ app.get('/api/test', (req, res) => {
 const setupRoutes = () => {
   try {
     console.log('🛣️ Loading API routes...');
-    
+    const probabilityRoutes = require('./routes/probability');
     const institutionRoutes = require('./routes/institutions');
     const articleRoutes = require('./routes/articles');
     const profileRoutes = require('./routes/profile');
     const ragRoutes = require('./routes/rag');
     const studentVueRoutes = require('./routes/studentvue');
 
+	app.use('/api/probability', probabilityRoutes);
     app.use('/api/institutions', institutionRoutes);
     app.use('/api/articles', articleRoutes);
     app.use('/api/profile', profileRoutes);
@@ -101,7 +102,10 @@ const setupRoutes = () => {
     app.post('/api/rag/query', (req, res) => {
       res.status(503).json({ error: 'RAG service temporarily unavailable' });
     });
-    
+    app.post('/api/probability/*', (req, res) => {
+    res.status(503).json({ error: 'Probability service temporarily unavailable' });
+	});
+	
     return false;
   }
 };
