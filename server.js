@@ -81,7 +81,7 @@ const setupRoutes = () => {
     const articleRoutes = require('./routes/articles');
     const profileRoutes = require('./routes/profile');
     const ragRoutes = require('./routes/rag');
-    const studentVueRoutes = require('./routes/studentvue');
+    const studentVueRoutes = require('./routes/StudentVue');
 
 	app.use('/api/probability', probabilityRoutes);
     app.use('/api/institutions', institutionRoutes);
