@@ -82,6 +82,7 @@ const setupRoutes = () => {
     const profileRoutes = require('./routes/profile');
     const ragRoutes = require('./routes/rag');
     const studentVueRoutes = require('./routes/StudentVue');
+    const scholarshipRoutes = require('./routes/scholarships');
 
 	app.use('/api/probability', probabilityRoutes);
     app.use('/api/institutions', institutionRoutes);
@@ -89,6 +90,7 @@ const setupRoutes = () => {
     app.use('/api/profile', profileRoutes);
     app.use('/api/rag', ragRoutes);
     app.use('/api/studentvue', studentVueRoutes);
+    app.use('/api/scholarships', scholarshipRoutes);
     
     console.log('✅ All API routes configured');
     return true;

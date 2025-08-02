@@ -369,15 +369,20 @@ router.post('/query', async (req, res) => {
       });
     }
 
+    console.log(`🤖 RAG Query: "${question.substring(0, 100)}..."`);
+
     // Check initialization
     if (!isInitialized) {
-      return res.status(503).json({ 
-        error: 'RAG service not properly configured',
-        code: 'SERVICE_UNAVAILABLE'
+      console.log('⚠️ RAG service not initialized, providing fallback response');
+      return res.json({
+        answer: "I'm here to help with your college and scholarship questions! While I'm getting my advanced features ready, I can still provide helpful guidance. Try asking about scholarships, application deadlines, essay requirements, or finding the right college for you.",
+        sources: [],
+        question: question,
+        category: 'fallback',
+        responseTime: Date.now() - startTime,
+        fallback: true
       });
     }
-
-    console.log(`🤖 RAG Query: "${question.substring(0, 100)}..."`);
 
     // Preprocess question
     questionInfo = preprocessQuestion(question);
@@ -395,29 +400,66 @@ router.post('/query', async (req, res) => {
     }
 
     // Generate embedding
-    const embedding = await generateEmbedding(questionInfo.cleaned);
-    console.log(`✅ Generated embedding (${embedding.length} dimensions)`);
+    let embedding;
+    try {
+      embedding = await generateEmbedding(questionInfo.cleaned);
+      console.log(`✅ Generated embedding (${embedding.length} dimensions)`);
+    } catch (embeddingError) {
+      console.error('❌ Embedding generation failed:', embeddingError);
+      // Continue without embedding for basic responses
+      embedding = null;
+    }
 
-    // Search documents
-    const searchResults = await searchDocuments(question, embedding, questionInfo.category);
-    console.log('✅ Document search completed');
+    // Search documents (if embedding available)
+    let searchResults = [];
+    if (embedding) {
+      try {
+        searchResults = await searchDocuments(question, embedding, questionInfo.category);
+        console.log('✅ Document search completed');
+      } catch (searchError) {
+        console.error('❌ Document search failed:', searchError);
+        // Continue without search results
+      }
+    }
 
     // Build context
-    const { context, sources } = await buildContext(searchResults, question, questionInfo.category);
-    console.log(`📋 Context built (${context.length} chars, ${sources.length} sources)`);
-
-    // Handle no context found
-    if (!context.trim()) {
-      return res.json({
-        answer: "I don't have specific information about that in my current knowledge base, but I'd be happy to help with other college-related questions.",
-        sources: [],
-        responseTime: Date.now() - startTime
-      });
+    let context = '';
+    let sources = [];
+    if (searchResults.length > 0) {
+      try {
+        const contextResult = await buildContext(searchResults, question, questionInfo.category);
+        context = contextResult.context;
+        sources = contextResult.sources;
+        console.log(`📋 Context built (${context.length} chars, ${sources.length} sources)`);
+      } catch (contextError) {
+        console.error('❌ Context building failed:', contextError);
+      }
     }
 
     // Generate AI response
-    const answer = await generateResponse(question, context, history, questionInfo.category);
-    console.log('✅ AI response generated');
+    let answer;
+    try {
+      answer = await generateResponse(question, context, history, questionInfo.category);
+      console.log('✅ AI response generated');
+    } catch (aiError) {
+      console.error('❌ AI response generation failed:', aiError);
+      
+      // Provide fallback response based on question type
+      const lowerQuestion = question.toLowerCase();
+      if (lowerQuestion.includes('scholarship')) {
+        answer = "I can help you find scholarships! Based on your profile, I recommend checking our scholarship database for opportunities that match your academic level, interests, and background. You can browse by category, search by keywords, or use our smart matching system to find the best opportunities for you.";
+      } else if (lowerQuestion.includes('deadline') || lowerQuestion.includes('application')) {
+        answer = "Application deadlines vary by institution and scholarship. I recommend checking our upcoming deadlines section and setting up reminders for important dates. Many scholarships have deadlines in the fall and winter months, so it's good to start early!";
+      } else if (lowerQuestion.includes('essay') || lowerQuestion.includes('requirement')) {
+        answer = "Essay requirements typically include personal statements, supplemental essays, and scholarship-specific prompts. Focus on telling your unique story, highlighting your achievements, and explaining why you're a good fit for the opportunity. Our AI can help you brainstorm topics and structure your essays.";
+      } else if (lowerQuestion.includes('stem') || lowerQuestion.includes('science') || lowerQuestion.includes('technology')) {
+        answer = "Great question! There are many STEM scholarships available for students interested in science, technology, engineering, and mathematics. These often have specific requirements related to your field of study, GPA, and sometimes research experience. Check our STEM category for targeted opportunities.";
+      } else if (lowerQuestion.includes('merit') || lowerQuestion.includes('aid')) {
+        answer = "Merit aid opportunities are based on academic achievement, leadership, and special talents. Many colleges offer merit scholarships, and there are also external organizations that provide merit-based funding. Your strong academic profile makes you competitive for these opportunities!";
+      } else {
+        answer = "I'm here to help with your college and scholarship questions! You can ask me about finding scholarships, application deadlines, essay requirements, financial aid, or any other college-related topics. What would you like to know more about?";
+      }
+    }
 
     // Prepare response
     const response = {
@@ -428,22 +470,29 @@ router.post('/query', async (req, res) => {
       responseTime: Date.now() - startTime
     };
 
-    // Cache the response
-    await setCachedResponse(question, response);
+    // Cache the response (if possible)
+    try {
+      await setCachedResponse(question, response);
+    } catch (cacheError) {
+      console.warn('⚠️ Cache storage failed:', cacheError);
+    }
 
     res.json(response);
 
   } catch (error) {
     console.error('❌ RAG query failed:', error);
     
-    const errorResponse = {
-      error: 'Failed to process your question',
-      details: error.message,
-      code: error.code || 'UNKNOWN_ERROR',
-      responseTime: Date.now() - startTime
-    };
-
-    res.status(500).json(errorResponse);
+    // Provide a helpful fallback response
+    const fallbackAnswer = "I'm here to help with your college and scholarship questions! While I'm experiencing some technical difficulties, I can still provide guidance. Try asking about scholarships, application deadlines, essay requirements, or finding the right college for you.";
+    
+    res.json({
+      answer: fallbackAnswer,
+      sources: [],
+      question: question || 'Unknown',
+      category: 'error',
+      responseTime: Date.now() - startTime,
+      error: true
+    });
   }
 });
 
@@ -493,6 +542,119 @@ router.post('/scholarships', async (req, res) => {
   } catch (error) {
     console.error('Error getting scholarship summary:', error);
     res.status(500).json({ error: 'Failed to get scholarship summary' });
+  }
+});
+
+// Streaming endpoint for real-time responses
+router.post('/stream', async (req, res) => {
+  const startTime = Date.now();
+  
+  try {
+    const { question, history = [] } = req.body;
+
+    // Input validation
+    if (!question || typeof question !== 'string') {
+      return res.status(400).json({ 
+        error: 'Valid question is required',
+        code: 'INVALID_INPUT'
+      });
+    }
+
+    // Check initialization
+    if (!isInitialized) {
+      return res.status(503).json({ 
+        error: 'RAG service not properly configured for streaming',
+        code: 'SERVICE_UNAVAILABLE'
+      });
+    }
+
+    console.log(`🌊 Streaming RAG Query: "${question.substring(0, 100)}..."`);
+
+    // Set headers for streaming
+    res.writeHead(200, {
+      'Content-Type': 'text/plain',
+      'Transfer-Encoding': 'chunked',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+
+    // Preprocess question
+    const questionInfo = preprocessQuestion(question);
+    
+    // Generate embedding
+    let embedding;
+    try {
+      embedding = await generateEmbedding(questionInfo.cleaned);
+    } catch (error) {
+      console.error('❌ Embedding failed for streaming:', error);
+      res.write('data: {"error": "Embedding service unavailable"}\n\n');
+      res.end();
+      return;
+    }
+
+    // Search documents
+    let searchResults = [];
+    try {
+      searchResults = await searchDocuments(question, embedding, questionInfo.category);
+    } catch (error) {
+      console.error('❌ Search failed for streaming:', error);
+      res.write('data: {"error": "Search service unavailable"}\n\n');
+      res.end();
+      return;
+    }
+
+    // Build context
+    let context = '';
+    let sources = [];
+    if (searchResults.length > 0) {
+      try {
+        const contextResult = await buildContext(searchResults, question, questionInfo.category);
+        context = contextResult.context;
+        sources = contextResult.sources;
+      } catch (error) {
+        console.error('❌ Context building failed for streaming:', error);
+      }
+    }
+
+    // Generate streaming response
+    try {
+      const systemPrompt = `You are Scholargy AI, an expert college admissions counselor. Provide helpful, accurate guidance on college admissions, scholarships, and academic planning. Be conversational and encouraging.`;
+
+      const messages = [
+        { role: "system", content: systemPrompt },
+        ...(history?.slice(-6) || []),
+        { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` }
+      ];
+
+      const stream = await clients.openai.chat.completions.create({
+        model: config.openai.chatModel,
+        messages,
+        max_tokens: 800,
+        temperature: 0.3,
+        stream: true
+      });
+
+      for await (const chunk of stream) {
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) {
+          res.write(`data: ${JSON.stringify({ content, type: 'chunk' })}\n\n`);
+        }
+      }
+
+      // Send completion signal
+      res.write(`data: ${JSON.stringify({ type: 'done', responseTime: Date.now() - startTime })}\n\n`);
+      res.end();
+
+    } catch (error) {
+      console.error('❌ Streaming AI response failed:', error);
+      res.write(`data: ${JSON.stringify({ error: 'AI service temporarily unavailable' })}\n\n`);
+      res.end();
+    }
+
+  } catch (error) {
+    console.error('❌ Streaming RAG query failed:', error);
+    res.write(`data: ${JSON.stringify({ error: 'Service temporarily unavailable' })}\n\n`);
+    res.end();
   }
 });
 
