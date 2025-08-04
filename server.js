@@ -168,73 +168,94 @@ setupFrontendRouting();
 
 // ✅ Initialize services asynchronously (non-blocking)
 const initializeServices = async () => {
-  console.log('🔄 Initializing background services...');
+  console.log('🔄 Initializing background services in parallel...');
+
+  // Initialize all services concurrently for faster startup
+  const servicePromises = [];
 
   // CosmosDB
-  try {
-    const { connectDB } = require('./db');
-    await connectDB();
-    serviceStatus.cosmosDB = 'connected';
-    console.log('✅ CosmosDB: Connected');
-  } catch (error) {
-    serviceStatus.cosmosDB = `error: ${error.message}`;
-    console.error('❌ CosmosDB failed:', error.message);
-  }
+  const cosmosDBPromise = (async () => {
+    try {
+      const { connectDB } = require('./db');
+      await connectDB();
+      serviceStatus.cosmosDB = 'connected';
+      console.log('✅ CosmosDB: Connected');
+    } catch (error) {
+      serviceStatus.cosmosDB = `error: ${error.message}`;
+      console.error('❌ CosmosDB failed:', error.message);
+    }
+  })();
+  servicePromises.push(cosmosDBPromise);
 
   // Redis Cache
-  try {
-    const { connectCache } = require('./cache');
-    await connectCache();
-    serviceStatus.redis = 'connected';
-    console.log('✅ Redis: Connected');
-  } catch (error) {
-    serviceStatus.redis = `error: ${error.message}`;
-    console.error('❌ Redis failed:', error.message);
-  }
+  const redisPromise = (async () => {
+    try {
+      const { connectCache } = require('./cache');
+      await connectCache();
+      serviceStatus.redis = 'connected';
+      console.log('✅ Redis: Connected');
+    } catch (error) {
+      serviceStatus.redis = `error: ${error.message}`;
+      console.error('❌ Redis failed:', error.message);
+    }
+  })();
+  servicePromises.push(redisPromise);
 
   // Azure OpenAI
   if (process.env.AZURE_OPENAI_ENDPOINT && process.env.AZURE_OPENAI_API_KEY) {
-    try {
-      const OpenAI = require('openai');
-      const openaiClient = new OpenAI({
-        baseURL: `${process.env.AZURE_OPENAI_ENDPOINT}openai`,
-        apiKey: process.env.AZURE_OPENAI_API_KEY,
-        defaultQuery: { "api-version": "2024-02-01" },
-        defaultHeaders: { "api-key": process.env.AZURE_OPENAI_API_KEY },
-      });
-      
-      await openaiClient.models.list();
-      serviceStatus.openAI = 'connected';
-      console.log('✅ Azure OpenAI: Connected');
-    } catch (error) {
-      serviceStatus.openAI = `error: ${error.message}`;
-      console.error('❌ Azure OpenAI failed:', error.message);
-    }
+    const openAIPromise = (async () => {
+      try {
+        const OpenAI = require('openai');
+        const openaiClient = new OpenAI({
+          baseURL: `${process.env.AZURE_OPENAI_ENDPOINT}openai`,
+          apiKey: process.env.AZURE_OPENAI_API_KEY,
+          defaultQuery: { "api-version": "2024-02-01" },
+          defaultHeaders: { "api-key": process.env.AZURE_OPENAI_API_KEY },
+        });
+        
+        await openaiClient.models.list();
+        serviceStatus.openAI = 'connected';
+        console.log('✅ Azure OpenAI: Connected');
+      } catch (error) {
+        serviceStatus.openAI = `error: ${error.message}`;
+        console.error('❌ Azure OpenAI failed:', error.message);
+      }
+    })();
+    servicePromises.push(openAIPromise);
   } else {
     serviceStatus.openAI = 'not configured';
   }
 
   // Azure Search
   if (process.env.AZURE_SEARCH_ENDPOINT && process.env.AZURE_SEARCH_API_KEY) {
-    try {
-      const { SearchClient, AzureKeyCredential } = require("@azure/search-documents");
-      const searchClient = new SearchClient(
-        process.env.AZURE_SEARCH_ENDPOINT,
-        process.env.AZURE_SEARCH_INDEX_NAME || "scholargyindex",
-        new AzureKeyCredential(process.env.AZURE_SEARCH_API_KEY)
-      );
-      serviceStatus.azureSearch = 'connected';
-      console.log('✅ Azure Search: Connected');
-    } catch (error) {
-      serviceStatus.azureSearch = `error: ${error.message}`;
-      console.error('❌ Azure Search failed:', error.message);
-    }
+    const searchPromise = (async () => {
+      try {
+        const { SearchClient, AzureKeyCredential } = require("@azure/search-documents");
+        const searchClient = new SearchClient(
+          process.env.AZURE_SEARCH_ENDPOINT,
+          process.env.AZURE_SEARCH_INDEX_NAME || "scholargyindex",
+          new AzureKeyCredential(process.env.AZURE_SEARCH_API_KEY)
+        );
+        serviceStatus.azureSearch = 'connected';
+        console.log('✅ Azure Search: Connected');
+      } catch (error) {
+        serviceStatus.azureSearch = `error: ${error.message}`;
+        console.error('❌ Azure Search failed:', error.message);
+      }
+    })();
+    servicePromises.push(searchPromise);
   } else {
     serviceStatus.azureSearch = 'not configured';
   }
 
-  console.log('🎯 Service initialization complete!');
-  serviceStatus.timestamp = new Date().toISOString();
+  // Wait for all services to complete initialization (with timeout)
+  try {
+    await Promise.allSettled(servicePromises);
+    console.log('🎯 Service initialization complete!');
+    serviceStatus.timestamp = new Date().toISOString();
+  } catch (error) {
+    console.error('❌ Service initialization error:', error);
+  }
 };
 
 // ✅ Initialize services in background (doesn't block server startup)
