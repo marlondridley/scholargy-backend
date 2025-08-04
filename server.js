@@ -41,8 +41,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ✅ Serve React build files
 const buildPath = path.join(__dirname, 'build');
 const publicPath = path.join(__dirname, 'public');
+const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'build');
 console.log('📁 Build path:', buildPath);
 console.log('📁 Public path:', publicPath);
+console.log('📁 Frontend build path:', frontendBuildPath);
 
 // Serve static files from public directory (Azure deployment)
 if (fs.existsSync(publicPath)) {
@@ -51,6 +53,9 @@ if (fs.existsSync(publicPath)) {
 } else if (fs.existsSync(buildPath)) {
   console.log('✅ Serving static files from build directory');
   app.use(express.static(buildPath));
+} else if (fs.existsSync(frontendBuildPath)) {
+  console.log('✅ Serving static files from frontend build directory');
+  app.use(express.static(frontendBuildPath));
 } else {
   console.log('⚠️ No static files directory found');
 }
@@ -126,6 +131,7 @@ const setupFrontendRouting = () => {
     // Try public directory first (Azure deployment)
     const publicIndexPath = path.join(__dirname, 'public', 'index.html');
     const buildIndexPath = path.join(__dirname, 'build', 'index.html');
+    const frontendBuildIndexPath = path.join(__dirname, '..', 'frontend', 'build', 'index.html');
     
     if (fs.existsSync(publicIndexPath)) {
       console.log('✅ Serving index.html from public directory');
@@ -133,6 +139,9 @@ const setupFrontendRouting = () => {
     } else if (fs.existsSync(buildIndexPath)) {
       console.log('✅ Serving index.html from build directory');
       res.sendFile(buildIndexPath);
+    } else if (fs.existsSync(frontendBuildIndexPath)) {
+      console.log('✅ Serving index.html from frontend build directory');
+      res.sendFile(frontendBuildIndexPath);
     } else {
       res.status(404).send(`
         <h1>🚀 Scholargy Server</h1>
