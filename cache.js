@@ -17,19 +17,36 @@ if (!redisConnectionString) {
 const redisClient = redisConnectionString ? redis.createClient({ url: redisConnectionString }) : null;
 
 /**
- * Asynchronously connects to the Redis server.
+ * Asynchronously connects to the Redis server with retry logic.
  * This function is called once when the server starts.
  */
 const connectCache = async () => {
   // Do nothing if the client was not created.
-  if (!redisClient) return;
-  try {
-    // Await the connection to the Redis server.
-    await redisClient.connect();
-    console.log('Successfully connected to Azure Redis Cache.');
-  } catch (error) {
-    // If the connection fails, log the error.
-    console.error('Failed to connect to Redis Cache:', error);
+  if (!redisClient) {
+    console.log('Redis client not created - caching disabled');
+    return;
+  }
+  
+  const maxRetries = 3;
+  const retryDelay = 2000; // 2 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempting to connect to Redis (attempt ${attempt}/${maxRetries})...`);
+      await redisClient.connect();
+      console.log('✅ Successfully connected to Azure Redis Cache.');
+      return;
+    } catch (error) {
+      console.error(`❌ Redis connection attempt ${attempt} failed:`, error.message);
+      
+      if (attempt < maxRetries) {
+        console.log(`⏳ Retrying in ${retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      } else {
+        console.error('❌ All Redis connection attempts failed. Caching will be disabled.');
+        throw error;
+      }
+    }
   }
 };
 

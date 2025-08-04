@@ -73,6 +73,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ✅ Startup probe endpoint (responds immediately)
+app.get('/api/startup', (req, res) => {
+  console.log('🚀 Startup probe requested');
+  res.status(200).json({
+    status: 'ready',
+    message: 'Server is ready to accept requests',
+    timestamp: new Date().toISOString(),
+    port: PORT
+  });
+});
+
 app.get('/api/test', (req, res) => {
   console.log('🧪 Test endpoint accessed');
   res.json({ 
@@ -248,19 +259,28 @@ const initializeServices = async () => {
     serviceStatus.azureSearch = 'not configured';
   }
 
-  // Wait for all services to complete initialization (with timeout)
-  try {
-    await Promise.allSettled(servicePromises);
-    console.log('🎯 Service initialization complete!');
+  // Start services in background with timeout - don't wait for completion
+  Promise.allSettled(servicePromises)
+    .then(() => {
+      console.log('🎯 Service initialization complete!');
+      serviceStatus.timestamp = new Date().toISOString();
+    })
+    .catch(error => {
+      console.error('❌ Service initialization error:', error);
+    });
+    
+  // Set a timeout to mark services as ready even if some fail
+  setTimeout(() => {
+    console.log('⏰ Service initialization timeout reached - server ready');
     serviceStatus.timestamp = new Date().toISOString();
-  } catch (error) {
-    console.error('❌ Service initialization error:', error);
-  }
+  }, 10000); // 10 second timeout
 };
 
 // ✅ Initialize services in background (doesn't block server startup)
 initializeServices().catch(error => {
   console.error('❌ Service initialization error:', error);
+  // Don't crash the server if services fail to initialize
+  console.log('⚠️ Server will continue running without some services');
 });
 
 // ✅ Error handling

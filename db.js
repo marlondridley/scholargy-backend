@@ -22,16 +22,29 @@ let db;
  * This function is called once when the server starts.
  */
 const connectDB = async () => {
-  try {
-    // Await the connection to the MongoDB cluster.
-    await client.connect();
-    // Get the database object using the name specified in the .env file.
-    db = client.db(process.env.DB_NAME);
-    console.log(`Successfully connected to Azure Cosmos DB: ${db.databaseName}`);
-  } catch (err) {
-    // If the connection fails, log the error and exit the application process.
-    console.error('Failed to connect to Cosmos DB', err);
-    process.exit(1);
+  const maxRetries = 3;
+  const retryDelay = 2000; // 2 seconds
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempting to connect to Cosmos DB (attempt ${attempt}/${maxRetries})...`);
+      // Await the connection to the MongoDB cluster.
+      await client.connect();
+      // Get the database object using the name specified in the .env file.
+      db = client.db(process.env.DB_NAME);
+      console.log(`✅ Successfully connected to Azure Cosmos DB: ${db.databaseName}`);
+      return;
+    } catch (err) {
+      console.error(`❌ Cosmos DB connection attempt ${attempt} failed:`, err.message);
+      
+      if (attempt < maxRetries) {
+        console.log(`⏳ Retrying in ${retryDelay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      } else {
+        console.error('❌ All Cosmos DB connection attempts failed.');
+        throw err;
+      }
+    }
   }
 };
 
