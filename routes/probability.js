@@ -98,51 +98,6 @@ router.post('/calculate', async (req, res) => {
     }
 });
 
-/**
- * @route   POST /api/probability/whatif
- * @desc    Calculate probabilities for what-if scenarios
- * @access  Public
- */
-router.post('/whatif', async (req, res) => {
-    const { baseProfile, scenarios, collegeId } = req.body;
 
-    if (!baseProfile || !scenarios || !collegeId) {
-        return res.status(400).json({ error: 'Base profile, scenarios, and college ID required' });
-    }
-
-    try {
-        const db = getDB();
-        const collection = db.collection('ipeds_colleges');
-        
-        const college = await collection.findOne({ unitid: parseInt(collegeId) });
-        if (!college) {
-            return res.status(404).json({ error: 'College not found' });
-        }
-
-        const collegeStats = {
-            avgGPA: 3.5,
-            sat75: college.admissions?.sat_scores?.math_75th && college.admissions?.sat_scores?.verbal_75th
-                ? college.admissions.sat_scores.math_75th + college.admissions.sat_scores.verbal_75th
-                : 1400,
-            admissionRate: college.admissions?.admission_rate || 0.5
-        };
-
-        const results = scenarios.map(scenario => {
-            const modifiedProfile = { ...baseProfile, ...scenario.changes };
-            const probability = calculateProbability(modifiedProfile, collegeStats);
-            
-            return {
-                scenario: scenario.name,
-                probability: Math.round(probability * 100),
-                delta: Math.round((probability - calculateProbability(baseProfile, collegeStats)) * 100)
-            };
-        });
-
-        res.json({ results });
-    } catch (error) {
-        console.error('Error calculating what-if scenarios:', error);
-        res.status(500).json({ error: 'Failed to calculate scenarios' });
-    }
-});
 
 module.exports = router;
