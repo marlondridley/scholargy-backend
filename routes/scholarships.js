@@ -685,4 +685,48 @@ router.post('/comprehensive-search', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/scholarships/test
+ * Test endpoint to check database connectivity and scholarship count
+ */
+router.get('/test', async (req, res) => {
+  try {
+    const { getDB } = require('../db');
+    const db = getDB();
+    const collection = db.collection('scholarships');
+    
+    // Count total scholarships
+    const totalCount = await collection.countDocuments();
+    
+    // Get a sample scholarship
+    const sampleScholarship = await collection.findOne({});
+    
+    // Check if collection exists and has data
+    const collections = await db.listCollections().toArray();
+    const scholarshipCollection = collections.find(col => col.name === 'scholarships');
+    
+    res.json({
+      success: true,
+      total_scholarships: totalCount,
+      has_sample: !!sampleScholarship,
+      collection_exists: !!scholarshipCollection,
+      sample_scholarship: sampleScholarship ? {
+        id: sampleScholarship._id,
+        title: sampleScholarship.basic_info?.title || sampleScholarship.description?.substring(0, 100),
+        provider: sampleScholarship.organization,
+        amount: sampleScholarship.award_info?.funds?.amount,
+        deadline: sampleScholarship.application?.deadline?.date
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error in scholarship test endpoint:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 module.exports = router;

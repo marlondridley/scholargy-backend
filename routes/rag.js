@@ -346,16 +346,30 @@ router.get('/health', (req, res) => {
   });
 });
 
-// Main RAG query endpoint
+// Main RAG query endpoint with timeout handling
 router.post('/query', async (req, res) => {
   const startTime = Date.now();
   let questionInfo = null;
+
+  // Set response timeout
+  const timeout = setTimeout(() => {
+    console.log('⏰ RAG query timeout - sending fallback response');
+    res.json({
+      answer: "I'm processing your question, but it's taking longer than expected. Here's a helpful response while I work on getting you the best answer: For scholarships, focus on deadlines, essay requirements, and matching your profile. For college comparisons, consider factors like location, programs, and financial aid.",
+      sources: [],
+      question: req.body?.question || '',
+      category: 'timeout',
+      responseTime: Date.now() - startTime,
+      timeout: true
+    });
+  }, 15000); // 15 second timeout
 
   try {
     const { question, history = [] } = req.body;
 
     // Input validation
     if (!question || typeof question !== 'string') {
+      clearTimeout(timeout);
       return res.status(400).json({ 
         error: 'Valid question is required',
         code: 'INVALID_INPUT'
@@ -363,6 +377,7 @@ router.post('/query', async (req, res) => {
     }
 
     if (question.length > 1000) {
+      clearTimeout(timeout);
       return res.status(400).json({ 
         error: 'Question too long (max 1000 characters)',
         code: 'QUESTION_TOO_LONG'
@@ -373,6 +388,7 @@ router.post('/query', async (req, res) => {
 
     // Check initialization
     if (!isInitialized) {
+      clearTimeout(timeout);
       console.log('⚠️ RAG service not initialized, providing fallback response');
       return res.json({
         answer: "I'm here to help with your college and scholarship questions! While I'm getting my advanced features ready, I can still provide helpful guidance. Try asking about scholarships, application deadlines, essay requirements, or finding the right college for you.",
@@ -477,10 +493,13 @@ router.post('/query', async (req, res) => {
       console.warn('⚠️ Cache storage failed:', cacheError);
     }
 
+    clearTimeout(timeout);
     res.json(response);
 
   } catch (error) {
     console.error('❌ RAG query failed:', error);
+    
+    clearTimeout(timeout);
     
     // Provide a helpful fallback response
     const fallbackAnswer = "I'm here to help with your college and scholarship questions! While I'm experiencing some technical difficulties, I can still provide guidance. Try asking about scholarships, application deadlines, essay requirements, or finding the right college for you.";
