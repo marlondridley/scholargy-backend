@@ -98,6 +98,60 @@ router.post('/calculate', async (req, res) => {
     }
 });
 
+/**
+ * @route   POST /api/probability/compare
+ * @desc    Compare admission probabilities between multiple colleges
+ * @access  Public
+ */
+router.post('/compare', async (req, res) => {
+    const { studentProfile, collegeIds } = req.body;
 
+    if (!studentProfile || !collegeIds || collegeIds.length < 2) {
+        return res.status(400).json({ error: 'Student profile and at least 2 college IDs required' });
+    }
+
+    try {
+        const db = getDB();
+        const collection = db.collection('ipeds_colleges');
+        
+        // Fetch colleges
+        const colleges = await collection.find({
+            unitid: { $in: collegeIds.map(id => parseInt(id)) }
+        }).toArray();
+
+        // Calculate probabilities and create comparison
+        const comparisons = colleges.map(college => {
+            const collegeStats = {
+                avgGPA: 3.5, // Default if not available
+                sat75: college.admissions?.sat_scores?.math_75th && college.admissions?.sat_scores?.verbal_75th
+                    ? college.admissions.sat_scores.math_75th + college.admissions.sat_scores.verbal_75th
+                    : 1400,
+                admissionRate: college.admissions?.admission_rate || 0.5
+            };
+
+            const probability = calculateProbability(studentProfile, collegeStats);
+            
+            return {
+                unitid: college.unitid,
+                name: college.general_info?.name,
+                probability: Math.round(probability * 100),
+                category: probability >= 0.7 ? 'safety' : probability >= 0.4 ? 'target' : 'reach',
+                collegeStats: {
+                    avgGPA: collegeStats.avgGPA,
+                    sat75: collegeStats.sat75,
+                    admissionRate: collegeStats.admissionRate
+                }
+            };
+        });
+
+        // Sort by probability (highest first)
+        comparisons.sort((a, b) => b.probability - a.probability);
+
+        res.json({ comparisons });
+    } catch (error) {
+        console.error('Error comparing colleges:', error);
+        res.status(500).json({ error: 'Failed to compare colleges' });
+    }
+});
 
 module.exports = router;

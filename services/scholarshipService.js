@@ -10,9 +10,17 @@ class ScholarshipService {
   }
 
   async initialize() {
-    this.db = getDB();
-    this.collection = this.db.collection('scholarships');
-    console.log('✅ Scholarship service initialized');
+    try {
+      this.db = getDB();
+      if (this.db) {
+        this.collection = this.db.collection('scholarships');
+        console.log('✅ Scholarship service initialized with database');
+      } else {
+        console.log('⚠️ Scholarship service initialized without database (local development mode)');
+      }
+    } catch (error) {
+      console.warn('⚠️ Scholarship service initialized without database:', error.message);
+    }
   }
 
   /**
@@ -643,47 +651,7 @@ class ScholarshipService {
     );
   }
 
-  /**
-   * Legacy demographic matching score (kept for backward compatibility)
-   */
-  calculateDemographicScore(studentProfile, demographics) {
-    let score = 0;
-    
-    if (demographics.first_generation && studentProfile.firstGeneration) {
-      score += 5;
-    }
-    
-    if (demographics.military_connection && studentProfile.militaryConnection) {
-      score += 5;
-    }
-    
-    if (demographics.requires_minority && studentProfile.minorityStatus) {
-      score += 5;
-    }
-    
-    if (demographics.gender && studentProfile.gender === demographics.gender) {
-      score += 5;
-    }
-    
-    return score;
-  }
 
-  /**
-   * Legacy activity/leadership matching score (kept for backward compatibility)
-   */
-  calculateActivityScore(studentProfile, activities) {
-    let score = 0;
-    
-    if (activities.community_service && studentProfile.communityService) {
-      score += 5;
-    }
-    
-    if (activities.leadership_required && studentProfile.leadershipExperience) {
-      score += 5;
-    }
-    
-    return score;
-  }
 
   /**
    * Search scholarships with smart matching - Optimized for high-performance indexes
@@ -698,6 +666,58 @@ class ScholarshipService {
     } = options;
 
     try {
+      // If database is not available, return mock data for local development
+      if (!this.collection) {
+        console.log('⚠️ Database not available, returning mock scholarships');
+        return [
+          {
+            _id: '1',
+            description: 'STEM Excellence Scholarship',
+            organization: 'National Science Foundation',
+            'award_info': { 'funds': { 'amount': 5000 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } },
+            'search_data': { 'categories': ['STEM', 'Academic'] },
+            'matching_criteria': {
+              'academic_levels': ['undergraduate'],
+              'fields_of_study': ['Computer Science', 'Engineering', 'Mathematics']
+            },
+            fit_score: 85,
+            urgency_level: 'critical',
+            days_until_deadline: 7
+          },
+          {
+            _id: '2',
+            description: 'Community Service Award',
+            organization: 'Local Community Foundation',
+            'award_info': { 'funds': { 'amount': 2500 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) } },
+            'search_data': { 'categories': ['Community Service', 'Leadership'] },
+            'matching_criteria': {
+              'academic_levels': ['undergraduate'],
+              'fields_of_study': ['All Majors']
+            },
+            fit_score: 75,
+            urgency_level: 'high',
+            days_until_deadline: 14
+          },
+          {
+            _id: '3',
+            description: 'Merit-Based Scholarship',
+            organization: 'University Excellence Fund',
+            'award_info': { 'funds': { 'amount': 10000 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } },
+            'search_data': { 'categories': ['Merit', 'Academic'] },
+            'matching_criteria': {
+              'academic_levels': ['undergraduate'],
+              'fields_of_study': ['All Majors']
+            },
+            fit_score: 90,
+            urgency_level: 'medium',
+            days_until_deadline: 30
+          }
+        ];
+      }
+
       // Build aggregation pipeline optimized for idx_primary_matching and idx_comprehensive_matching
       const pipeline = [
         // Use idx_active for initial filtering
@@ -817,6 +837,24 @@ class ScholarshipService {
    */
   async getScholarshipStats(studentProfile) {
     try {
+      // If database is not available, return mock data for local development
+      if (!this.collection) {
+        console.log('⚠️ Database not available, returning mock scholarship stats');
+        return {
+          total_scholarships: 3,
+          total_value: 17500,
+          avg_amount: 5833,
+          renewable_count: 1,
+          categories: [
+            { _id: 'STEM', count: 1, total_value: 5000 },
+            { _id: 'Community Service', count: 1, total_value: 2500 },
+            { _id: 'Merit', count: 1, total_value: 10000 }
+          ],
+          student_match_potential: 5250,
+          last_updated: new Date().toISOString()
+        };
+      }
+
       // Use idx_active for initial filtering
       const pipeline = [
         { $match: { 'metadata.is_active': true } },
@@ -868,6 +906,22 @@ class ScholarshipService {
    */
   async getUpcomingDeadlines(days = 30) {
     try {
+      // If database is not available, return mock data for local development
+      if (!this.collection) {
+        console.log('⚠️ Database not available, returning mock upcoming deadlines');
+        return [
+          {
+            _id: '1',
+            description: 'STEM Excellence Scholarship',
+            organization: 'National Science Foundation',
+            'award_info': { 'funds': { 'amount': 5000 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } },
+            urgency_level: 'critical',
+            days_until_deadline: 7
+          }
+        ];
+      }
+
       const now = new Date();
       const futureDate = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
 

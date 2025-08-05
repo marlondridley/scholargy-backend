@@ -6,8 +6,17 @@ const scholarshipService = require('../services/scholarshipService');
 const { redisClient } = require('../cache');
 const { ObjectId } = require('mongodb');
 
-// Initialize scholarship service
-scholarshipService.initialize().catch(console.error);
+// Initialize scholarship service with error handling
+let serviceInitialized = false;
+scholarshipService.initialize()
+  .then(() => {
+    console.log('✅ Scholarship service initialized successfully');
+    serviceInitialized = true;
+  })
+  .catch(error => {
+    console.error('❌ Failed to initialize scholarship service:', error);
+    // Continue without service for local development
+  });
 
 /**
  * POST /api/scholarships/search
@@ -65,14 +74,16 @@ router.post('/search', async (req, res) => {
         description: s.description || 'Scholarship description',
         requirements: s.application?.requirements || [],
         categories: s.search_data?.categories || [],
-        application_url: s.contact_info?.website || '#',
+        application_url: s.raw_data?.for_more_information || s.contact_info?.website || '#',
         fit_score: s.fit_score,
         days_until_deadline: s.days_until_deadline,
         urgency_level: s.urgency_level,
         renewable: s.award_info?.renewable || false,
         fields_of_study: s.matching_criteria?.fields_of_study || [],
         academic_levels: s.matching_criteria?.academic_levels || [],
-        demographics: s.matching_criteria?.demographics || {}
+        demographics: s.matching_criteria?.demographics || {},
+        raw_data: s.raw_data || {},
+        state: s.raw_data?.state || s.matching_criteria?.location?.state || null
       })),
       stats,
       timestamp: new Date().toISOString(),
@@ -359,16 +370,22 @@ router.get('/:id', async (req, res) => {
     const result = {
       scholarship: {
         id: scholarship._id,
-        title: scholarship.basic_info?.title || 'Scholarship Title',
+        title: scholarship.description?.substring(0, 100) || 'Scholarship Title',
         provider: scholarship.organization || 'Organization',
         amount: scholarship.award_info?.funds?.amount || 0,
         deadline: scholarship.application?.deadline?.date,
-        description: scholarship.basic_info?.description || scholarship.basic_info?.summary || '',
+        description: scholarship.description || scholarship.basic_info?.summary || '',
         requirements: scholarship.application?.requirements || [],
         categories: scholarship.search_data?.categories || [],
         fields_of_study: scholarship.matching_criteria?.fields_of_study || [],
         academic_levels: scholarship.matching_criteria?.academic_levels || [],
-        demographics: scholarship.matching_criteria?.demographics || {}
+        demographics: scholarship.matching_criteria?.demographics || {},
+        application_url: scholarship.raw_data?.for_more_information || scholarship.contact_info?.website || '#',
+        raw_data: scholarship.raw_data || {},
+        state: scholarship.raw_data?.state || scholarship.matching_criteria?.location?.state || null,
+        fit_score: scholarship.fit_score,
+        urgency_level: scholarship.urgency_level,
+        days_until_deadline: scholarship.days_until_deadline
       },
       timestamp: new Date().toISOString()
     };
@@ -687,46 +704,14 @@ router.post('/comprehensive-search', async (req, res) => {
 
 /**
  * GET /api/scholarships/test
- * Test endpoint to check database connectivity and scholarship count
+ * Test endpoint to verify routes are loaded
  */
-router.get('/test', async (req, res) => {
-  try {
-    const { getDB } = require('../db');
-    const db = getDB();
-    const collection = db.collection('scholarships');
-    
-    // Count total scholarships
-    const totalCount = await collection.countDocuments();
-    
-    // Get a sample scholarship
-    const sampleScholarship = await collection.findOne({});
-    
-    // Check if collection exists and has data
-    const collections = await db.listCollections().toArray();
-    const scholarshipCollection = collections.find(col => col.name === 'scholarships');
-    
-    res.json({
-      success: true,
-      total_scholarships: totalCount,
-      has_sample: !!sampleScholarship,
-      collection_exists: !!scholarshipCollection,
-      sample_scholarship: sampleScholarship ? {
-        id: sampleScholarship._id,
-        title: sampleScholarship.basic_info?.title || sampleScholarship.description?.substring(0, 100),
-        provider: sampleScholarship.organization,
-        amount: sampleScholarship.award_info?.funds?.amount,
-        deadline: sampleScholarship.application?.deadline?.date
-      } : null,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error in scholarship test endpoint:', error);
-    res.status(500).json({ 
-      success: false,
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
+router.get('/test', (req, res) => {
+  res.json({ 
+    message: 'Scholarship routes are working!',
+    serviceInitialized,
+    timestamp: new Date().toISOString()
+  });
 });
 
 module.exports = router;

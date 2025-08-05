@@ -7,14 +7,7 @@ require('dotenv').config();
 
 // Retrieve the database connection string from environment variables.
 const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
-// If the connection string is missing, throw an error to prevent the app from starting incorrectly.
-if (!connectionString) {
-  throw new Error('COSMOS_DB_CONNECTION_STRING is not defined in the .env file.');
-}
-
-// Create a new instance of the MongoClient with the connection string.
-const client = new MongoClient(connectionString);
-// Declare a variable 'db' that will hold the database connection object once established.
+// For local development, allow the app to run without database connection
 let db;
 
 /**
@@ -22,6 +15,11 @@ let db;
  * This function is called once when the server starts.
  */
 const connectDB = async () => {
+  if (!connectionString) {
+    console.warn('⚠️ COSMOS_DB_CONNECTION_STRING is not defined. Running in local development mode without database.');
+    return;
+  }
+
   const maxRetries = 3;
   const retryDelay = 2000; // 2 seconds
   
@@ -29,6 +27,7 @@ const connectDB = async () => {
     try {
       console.log(`Attempting to connect to Cosmos DB (attempt ${attempt}/${maxRetries})...`);
       // Await the connection to the MongoDB cluster.
+      const client = new MongoClient(connectionString);
       await client.connect();
       // Get the database object using the name specified in the .env file.
       db = client.db(process.env.DB_NAME);
@@ -54,9 +53,10 @@ const connectDB = async () => {
  * @returns {Db} The MongoDB database instance.
  */
 const getDB = () => {
-  // If the database object hasn't been initialized, throw an error.
+  // If the database object hasn't been initialized, return null for local development
   if (!db) {
-    throw new Error('Database not initialized. Call connectDB first.');
+    console.warn('⚠️ Database not initialized. Running in local development mode.');
+    return null;
   }
   return db;
 };
