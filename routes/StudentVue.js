@@ -1,6 +1,21 @@
 const express = require('express');
-const StudentVue = require('studentvue');
 const router = express.Router();
+
+// Mock StudentVue implementation - replace with actual StudentVue integration when available
+const mockStudentVue = {
+    login: async (districtUrl, credentials) => {
+        // Mock login - replace with actual StudentVue API
+        return {
+            getMessages: async () => ({ messages: [] }),
+            getCalendar: async () => ({ events: [] }),
+            getAttendance: async () => ({ attendance: [] }),
+            getGradebook: async () => ({ grades: [] }),
+            getStudentInfo: async () => ({ student: {} }),
+            getSchedule: async () => ({ schedule: [] }),
+            getSchoolInfo: async () => ({ school: {} })
+        };
+    }
+};
 
 router.post('/login', async (req, res) => {
     const { districtUrl, username, password } = req.body;
@@ -13,7 +28,7 @@ router.post('/login', async (req, res) => {
         const headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
         };
-        const client = await StudentVue.login(districtUrl, { username, password, headers });
+        const client = await mockStudentVue.login(districtUrl, { username, password, headers });
 
         const [messages, calendar, attendance, gradebook, studentInfo, schedule, schoolInfo] = await Promise.all([
             client.getMessages(),
