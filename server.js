@@ -1,6 +1,7 @@
 // ✅ Refactored server startup to ensure DB connection is ready before loading services/routes
 const express = require('express');
 const cors = require('cors');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
@@ -8,9 +9,65 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Apply rate limiting to all requests
+app.use(limiter);
+
+// Security middleware
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// Bot protection - block suspicious requests
+app.use((req, res, next) => {
+  const userAgent = req.headers['user-agent'] || '';
+  const suspiciousPatterns = [
+    /bot/i,
+    /crawler/i,
+    /spider/i,
+    /scanner/i,
+    /robots/i
+  ];
+  
+  // Block requests with suspicious user agents
+  if (suspiciousPatterns.some(pattern => pattern.test(userAgent))) {
+    console.log(`🚫 Blocked suspicious request from: ${userAgent}`);
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  
+  // Block requests to suspicious paths
+  const suspiciousPaths = [
+    /robots\d+\.txt/i,
+    /\.env/i,
+    /wp-admin/i,
+    /phpmyadmin/i,
+    /admin/i
+  ];
+  
+  if (suspiciousPaths.some(pattern => pattern.test(req.path))) {
+    console.log(`🚫 Blocked suspicious path: ${req.path}`);
+    return res.status(404).json({ error: 'Not found' });
+  }
+  
+  next();
+});
 
 const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'build');
 app.use(express.static(frontendBuildPath));
@@ -18,6 +75,10 @@ app.use(express.static(frontendBuildPath));
 const startServer = async () => {
   try {
     console.log('🔄 Initializing services...');
+
+    // Validate environment variables
+    const { validateEnvironment } = require('./utils/envValidation');
+    validateEnvironment();
 
     // Step 1: Connect DB and Cache FIRST
     const { connectDB, getDB } = require('./db');
@@ -34,7 +95,14 @@ const startServer = async () => {
 
     // Step 2: Initialize services (works with or without DB)
     const scholarshipService = require('./services/scholarshipService');
+    const careerService = require('./services/careerService');
+    const userService = require('./services/userService');
+    
     await scholarshipService.initialize();
+    await careerService.initialize();
+    await userService.initialize();
+    
+    console.log('✅ All services initialized');
 
     // Step 3: Load API routes
     console.log('🛣️ Loading API routes...');

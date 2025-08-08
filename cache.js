@@ -16,7 +16,11 @@ if (!redisConnectionString) {
 const redisClient = redisConnectionString ? redis.createClient({ 
     url: redisConnectionString,
     socket: {
-        reconnectStrategy: (retries) => Math.min(retries * 50, 5000) // Reconnect with backoff
+        reconnectStrategy: (retries) => {
+          if (retries > 10) return new Error('Retry limit exceeded');
+          return Math.min(retries * 100, 3000); // Slow exponential backoff
+        },
+        keepAlive: 10000
     }
 }) : null;
 
