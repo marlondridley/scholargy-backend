@@ -1,151 +1,61 @@
-// backend/server.js
+console.log('Node.js version:', process.version);
+console.log('ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT || 8080);
+console.log('COSMOS_DB_CONNECTION_STRING:', process.env.COSMOS_DB_CONNECTION_STRING);
+console.log('AZURE_REDIS_CONNECTION_STRING:', process.env.AZURE_REDIS_CONNECTION_STRING);
+console.log('DB_NAME:', process.env.DB_NAME);
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server started on port ${PORT}`);
+});
+
 const express = require('express');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
 const path = require('path');
-const fs = require('fs');
-
-// Load environment variables FIRST, before anything else
-require('dotenv').config();
-
 const app = express();
 
-// --- Middleware & Security Setup ---
-app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// --- Middleware ---
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Basic rate limiting to prevent abuse
-app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
+// --- Static Frontend ---
+const frontendPath = path.join(__dirname, '..', 'frontend', 'build');
+app.use(express.static(frontendPath));
 
-// Security headers
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  next();
+// --- Basic Health Route ---
+app.get('/health', (_, res) => res.send('✅ Server is running'));
+
+// --- Routes ---
+try {
+  console.log('🛣️  Loading routes...');
+  app.use('/api/articles', require('./routes/articles'));
+  app.use('/api/institutions', require('./routes/institutions'));
+  app.use('/api/probability', require('./routes/probability'));
+  app.use('/api/rag', require('./routes/rag'));
+  app.use('/api/scholarships', require('./routes/scholarships'));
+  app.use('/api/profile', require('./routes/profile'));
+  app.use('/api/search', require('./routes/search'));
+  app.use('/api/matching', require('./routes/matching'));
+  app.use('/api/user', require('./routes/user'));
+  app.use('/api/report', require('./routes/report'));
+  app.use('/api/forecaster', require('./routes/forecaster'));
+  app.use(require('./routes/StudentVue')); // No /api/ prefix
+  console.log('✅ All routes loaded');
+} catch (err) {
+  console.error('❌ Route loading failed:', err);
+}
+
+// --- Catch-All to Frontend ---
+app.get('*', (_, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-// --- Static File Serving ---
-const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'build');
-app.use(express.static(frontendBuildPath));
-
-// --- Main Server Startup Logic ---
-const startServer = async () => {
-  try {
-    // PORT configuration - Azure automatically provides PORT at runtime
-    const PORT = process.env.PORT || 8080;
-    console.log(`🔧 All environment variables:`, Object.keys(process.env));
-    console.log(`🔧 Environment PORT: ${process.env.PORT}`);
-    console.log(`🔧 Using PORT: ${PORT}`);
-    console.log(`🔧 PORT type: ${typeof PORT}`);
-
-    console.log('🔄 Initializing services...');
-    
-    // Step 1: Connect to essential databases before loading routes
-    const { connectDB } = require('./db');
-    const { connectCache } = require('./cache');
-    await connectDB();
-    await connectCache();
-    console.log('✅ Database and cache connected successfully.');
-
-    // Step 2: Initialize services that depend on the database connection
-    const scholarshipService = require('./services/scholarshipService');
-    const careerService = require('./services/careerService');
-    const userService = require('./services/userService');
-    // Ensure services have an initialize method if they need async setup
-    if (scholarshipService.initialize) await scholarshipService.initialize();
-    if (careerService.initialize) await careerService.initialize();
-    if (userService.initialize) await userService.initialize();
-    console.log('✅ All services initialized.');
-
-    // Step 3: Load API routes now that services are ready
-    console.log('🛣️  Loading API routes...');
-    app.use('/api/articles', require('./routes/articles'));
-    app.use('/api/institutions', require('./routes/institutions'));
-    app.use('/api/probability', require('./routes/probability'));
-    app.use('/api/rag', require('./routes/rag'));
-    app.use('/api/scholarships', require('./routes/scholarships'));
-    app.use('/api/profile', require('./routes/profile'));
-    app.use('/api/search', require('./routes/search'));
-    app.use('/api/matching', require('./routes/matching'));
-    app.use('/api/user', require('./routes/user'));
-    app.use('/api/report', require('./routes/report'));
-    app.use('/api/forecaster', require('./routes/forecaster'));
-    app.use(require('./routes/StudentVue')); // Non-API route
-    console.log('✅ All API routes configured.');
-
-    // --- Frontend Catch-all ---
-    app.get('*', (req, res) => {
-        const indexPath = path.join(frontendBuildPath, 'index.html');
-        if (fs.existsSync(indexPath)) {
-            res.sendFile(indexPath);
-        } else {
-            res.status(404).json({ 
-                error: "Frontend not found.",
-                message: "Please ensure the frontend application has been built."
-            });
-        }
-    });
-
-    // --- Centralized Error Handler ---
-    app.use((err, req, res, next) => {
-        console.error('❌ Express Route Error:', err.stack || err);
-        res.status(500).json({ error: 'Internal server error' });
-    });
-
-    // Convert PORT to number to ensure it's not a string
-    const portNumber = parseInt(PORT, 10);
-    console.log(`🔧 Final port number: ${portNumber}`);
-
-    // Start the server
-    const server = app.listen(portNumber, '0.0.0.0', () => {
-        console.log(`🚀 Server is live and listening on port ${portNumber}`);
-        console.log(`🌐 Server URL: http://localhost:${portNumber}`);
-    });
-
-    // Add error handler for server startup
-    server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.error(`❌ Port ${portNumber} is already in use. Please choose a different port or stop the process using this port.`);
-        } else {
-            console.error('❌ Server startup error:', err);
-        }
-        process.exit(1);
-    });
-
-    // --- Graceful Shutdown ---
-    const gracefulShutdown = (signal) => {
-        console.log(`🛑 ${signal} received - shutting down gracefully...`);
-        server.close(() => {
-            console.log('✅ Server closed successfully.');
-            process.exit(0);
-        });
-    };
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-  } catch (error) {
-    console.error('❌ Fatal: Failed to start server:', error);
-    process.exit(1);
-  }
+// --- Start Server ---
+const startServer = () => {
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server started on port ${PORT}`);
+  });
 };
 
-// --- Global Unhandled Error Catchers ---
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('❌ Unhandled Rejection:', reason);
-  process.exit(1);
-});
-
-// --- Start the Application ---
 startServer();
