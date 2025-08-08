@@ -24,7 +24,8 @@
     "mongodb": "^6.3.0",
     "openai": "^4.20.1",
     "path": "^0.12.7",
-    "redis": "^5.8.0"
+    "redis": "^5.8.0",
+    "studentvue": "^1.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

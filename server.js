@@ -111,13 +111,17 @@ const startServer = async () => {
     app.use('/api/probability', require('./routes/probability'));
     app.use('/api/rag', require('./routes/rag'));
     app.use('/api/scholarships', require('./routes/scholarships'));
-    app.use('/api/studentvue', require('./routes/StudentVue'));
     app.use('/api/profile', require('./routes/profile'));
     app.use('/api/search', require('./routes/search'));
     app.use('/api/matching', require('./routes/matching'));
     app.use('/api/user', require('./routes/user'));
     app.use('/api/report', require('./routes/report'));
     app.use('/api/forecaster', require('./routes/forecaster'));
+    
+    // StudentVue routes without /api prefix
+    const studentVueRoutes = require('./routes/StudentVue');
+    app.use(studentVueRoutes);
+    
     console.log('✅ All API routes configured');
 
     // Health check endpoint
