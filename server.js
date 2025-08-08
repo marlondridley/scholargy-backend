@@ -21,7 +21,7 @@ const startServer = async () => {
 
     // Step 1: Connect DB and Cache FIRST
     const { connectDB, getDB } = require('./db');
-    const { connectCache } = require('./cache');
+    const { connectCache, checkRedisHealth } = require('./cache');
 
     const db = await connectDB();
     await connectCache();
@@ -51,6 +51,31 @@ const startServer = async () => {
     app.use('/api/report', require('./routes/report'));
     app.use('/api/forecaster', require('./routes/forecaster'));
     console.log('✅ All API routes configured');
+
+    // Health check endpoint
+    app.get('/health', async (req, res) => {
+      try {
+        const redisHealth = await checkRedisHealth();
+        const dbStatus = getDB() ? 'connected' : 'disconnected';
+        
+        res.json({
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          services: {
+            database: dbStatus,
+            redis: redisHealth.status,
+            server: 'running'
+          },
+          redis: redisHealth
+        });
+      } catch (error) {
+        res.status(500).json({
+          status: 'unhealthy',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
 
     // React fallback route
     app.get('*', (req, res) => {
