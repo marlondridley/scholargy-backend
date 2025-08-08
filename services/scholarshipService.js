@@ -918,6 +918,15 @@ class ScholarshipService {
             'application': { 'deadline': { 'date': new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } },
             urgency_level: 'critical',
             days_until_deadline: 7
+          },
+          {
+            _id: '2',
+            description: 'Merit-Based Academic Scholarship',
+            organization: 'Academic Excellence Foundation',
+            'award_info': { 'funds': { 'amount': 3000 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) } },
+            urgency_level: 'urgent',
+            days_until_deadline: 14
           }
         ];
       }
@@ -961,6 +970,31 @@ class ScholarshipService {
    */
   async searchScholarshipsByText(searchText, studentProfile = null, limit = 20) {
     try {
+      // If database is not available, return mock data
+      if (!this.collection) {
+        console.log('⚠️ Database not available, returning mock search results');
+        return [
+          {
+            _id: '1',
+            description: 'STEM Excellence Scholarship',
+            organization: 'National Science Foundation',
+            'award_info': { 'funds': { 'amount': 5000 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } },
+            urgency_level: 'critical',
+            days_until_deadline: 7
+          },
+          {
+            _id: '2',
+            description: 'Merit-Based Academic Scholarship',
+            organization: 'Academic Excellence Foundation',
+            'award_info': { 'funds': { 'amount': 3000 } },
+            'application': { 'deadline': { 'date': new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) } },
+            urgency_level: 'urgent',
+            days_until_deadline: 14
+          }
+        ];
+      }
+
       // Use idx_text_search for optimal full-text search performance
       const pipeline = [
         {

@@ -134,6 +134,35 @@ router.get('/categories', async (req, res) => {
     // Get categories from database
     const { getDB } = require('../db');
     const db = getDB();
+    
+    // If database is not available, return mock categories
+    if (!db) {
+      console.log('⚠️ Database not available, returning mock categories');
+      const mockCategories = [
+        { _id: 'stem', count: 15, total_value: 75000 },
+        { _id: 'academic_excellence', count: 12, total_value: 60000 },
+        { _id: 'minority_students', count: 8, total_value: 40000 },
+        { _id: 'first_generation', count: 6, total_value: 30000 },
+        { _id: 'community_service', count: 10, total_value: 50000 }
+      ];
+      
+      const categories = mockCategories.map(cat => ({
+        id: cat._id,
+        name: cat._id ? cat._id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown Category',
+        count: cat.count,
+        total_value: cat.total_value || 0
+      }));
+
+      const result = {
+        categories,
+        total_scholarships: mockCategories.reduce((sum, cat) => sum + cat.count, 0),
+        last_updated: new Date().toISOString(),
+        source: 'Mock Data (Database Unavailable)'
+      };
+
+      return res.json(result);
+    }
+    
     const collection = db.collection('scholarships');
     
     const categoryAggregation = await collection.aggregate([
@@ -152,7 +181,7 @@ router.get('/categories', async (req, res) => {
 
     const categories = categoryAggregation.map(cat => ({
       id: cat._id,
-      name: this.formatCategoryName(cat._id),
+      name: cat._id ? cat._id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'Unknown Category',
       count: cat.count,
       total_value: cat.total_value || 0
     }));
