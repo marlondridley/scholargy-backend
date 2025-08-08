@@ -42,10 +42,34 @@ const connectCache = async () => {
     
     try {
         await redisClient.connect();
+        console.log('✅ Successfully connected to Azure Redis Cache.');
     } catch (error) {
         console.error(`❌ Initial Redis connection failed:`, error.message);
         // The client will automatically attempt to reconnect based on the strategy defined above.
     }
 };
 
-module.exports = { connectCache, redisClient };
+/**
+ * Checks if Redis cache is healthy
+ */
+const checkRedisHealth = async () => {
+    if (!redisClient) {
+        return { status: 'disabled', message: 'Redis client not configured' };
+    }
+
+    try {
+        await redisClient.ping();
+        return {
+            status: 'healthy',
+            message: 'Redis cache is operational'
+        };
+    } catch (error) {
+        return {
+            status: 'unhealthy',
+            message: `Redis health check failed: ${error.message}`,
+            error: error.message
+        };
+    }
+};
+
+module.exports = { connectCache, redisClient, checkRedisHealth };

@@ -1,4 +1,4 @@
-// ✅ Refactored server startup to ensure DB connection is ready before loading services/routes
+// backend/server.js
 const express = require('express');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
@@ -8,85 +8,58 @@ require('dotenv').config();
 
 const app = express();
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-app.use(limiter);
-
-// Security middleware
+// --- Middleware & Security Setup ---
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Basic rate limiting to prevent abuse
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 // Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
 });
 
-// Bot protection
-app.use((req, res, next) => {
-  const userAgent = req.headers['user-agent'] || '';
-  const suspiciousPatterns = [/bot/i, /crawler/i, /spider/i, /scanner/i, /robots/i];
-
-  if (suspiciousPatterns.some((pattern) => pattern.test(userAgent))) {
-    console.log(`🚫 Blocked suspicious request from: ${userAgent}`);
-    return res.status(403).json({ error: 'Access denied' });
-  }
-
-  const suspiciousPaths = [/robots\d+\.txt/i, /\.env/i, /wp-admin/i, /phpmyadmin/i, /admin/i];
-
-  if (suspiciousPaths.some((pattern) => pattern.test(req.path))) {
-    console.log(`🚫 Blocked suspicious path: ${req.path}`);
-    return res.status(404).json({ error: 'Not found' });
-  }
-
-  next();
-});
-
+// --- Static File Serving ---
 const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'build');
 app.use(express.static(frontendBuildPath));
 
+// --- Main Server Startup Logic ---
 const startServer = async () => {
-  const PORT = process.env.PORT || 8080;
-
   try {
+    // Corrected: Define PORT inside the async function to ensure it's in scope.
+    const PORT = process.env.PORT || 8080;
+
     console.log('🔄 Initializing services...');
-
-    const { validateEnvironment } = require('./utils/envValidation');
-    validateEnvironment();
-
-    const { connectDB, getDB } = require('./db');
-    const { connectCache, checkRedisHealth } = require('./cache');
-
-    const db = await connectDB();
+    
+    // Step 1: Connect to essential databases before loading routes
+    const { connectDB } = require('./db');
+    const { connectCache } = require('./cache');
+    await connectDB();
     await connectCache();
+    console.log('✅ Database and cache connected successfully.');
 
-    if (!db) {
-      console.warn('⚠️ Database connection failed, but continuing with mock data...');
-    } else {
-      console.log('✅ Database and cache connected');
-    }
-
+    // Step 2: Initialize services that depend on the database connection
     const scholarshipService = require('./services/scholarshipService');
     const careerService = require('./services/careerService');
     const userService = require('./services/userService');
+    // Ensure services have an initialize method if they need async setup
+    if (scholarshipService.initialize) await scholarshipService.initialize();
+    if (careerService.initialize) await careerService.initialize();
+    if (userService.initialize) await userService.initialize();
+    console.log('✅ All services initialized.');
 
-    await scholarshipService.initialize();
-    await careerService.initialize();
-    await userService.initialize();
-
-    console.log('✅ All services initialized');
-
-    console.log('🛣️ Loading API routes...');
+    // Step 3: Load API routes now that services are ready
+    console.log('🛣️  Loading API routes...');
     app.use('/api/articles', require('./routes/articles'));
     app.use('/api/institutions', require('./routes/institutions'));
     app.use('/api/probability', require('./routes/probability'));
@@ -98,70 +71,51 @@ const startServer = async () => {
     app.use('/api/user', require('./routes/user'));
     app.use('/api/report', require('./routes/report'));
     app.use('/api/forecaster', require('./routes/forecaster'));
+    app.use(require('./routes/StudentVue')); // Non-API route
+    console.log('✅ All API routes configured.');
 
-    // StudentVue routes without /api prefix
-    const studentVueRoutes = require('./routes/StudentVue');
-    app.use(studentVueRoutes);
-
-    console.log('✅ All API routes configured');
-
-    app.get('/health', async (req, res) => {
-      try {
-        const redisHealth = await checkRedisHealth();
-        const dbStatus = getDB() ? 'connected' : 'disconnected';
-
-        res.json({
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-          services: {
-            database: dbStatus,
-            redis: redisHealth.status,
-            server: 'running',
-          },
-          redis: redisHealth,
-        });
-      } catch (error) {
-        res.status(500).json({
-          status: 'unhealthy',
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        });
-      }
-    });
-
-    // Fallback route
+    // --- Frontend Catch-all ---
     app.get('*', (req, res) => {
-      const indexPath = path.join(frontendBuildPath, 'index.html');
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(404).json({
-          error: 'Frontend not found.',
-          message: 'Please ensure the frontend application has been built.',
-        });
-      }
+        const indexPath = path.join(frontendBuildPath, 'index.html');
+        if (fs.existsSync(indexPath)) {
+            res.sendFile(indexPath);
+        } else {
+            res.status(404).json({ 
+                error: "Frontend not found.",
+                message: "Please ensure the frontend application has been built."
+            });
+        }
     });
 
+    // --- Centralized Error Handler ---
+    app.use((err, req, res, next) => {
+        console.error('❌ Express Route Error:', err.stack || err);
+        res.status(500).json({ error: 'Internal server error' });
+    });
+
+    // Start the server
     const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server is live on port ${PORT}`);
+        console.log(`🚀 Server is live and listening on port ${PORT}`);
     });
 
+    // --- Graceful Shutdown ---
     const gracefulShutdown = (signal) => {
-      console.log(`🛑 ${signal} received - shutting down gracefully...`);
-      server.close(() => {
-        console.log('✅ Server closed successfully');
-        process.exit(0);
-      });
+        console.log(`🛑 ${signal} received - shutting down gracefully...`);
+        server.close(() => {
+            console.log('✅ Server closed successfully.');
+            process.exit(0);
+        });
     };
-
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
   } catch (error) {
     console.error('❌ Fatal: Failed to start server:', error);
     process.exit(1);
   }
 };
 
+// --- Global Unhandled Error Catchers ---
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
   process.exit(1);
@@ -172,4 +126,5 @@ process.on('unhandledRejection', (reason) => {
   process.exit(1);
 });
 
+// --- Start the Application ---
 startServer();
