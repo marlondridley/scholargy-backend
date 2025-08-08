@@ -4,6 +4,8 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
+
+// Load environment variables FIRST, before anything else
 require('dotenv').config();
 
 const app = express();
@@ -36,8 +38,12 @@ app.use(express.static(frontendBuildPath));
 // --- Main Server Startup Logic ---
 const startServer = async () => {
   try {
-    // Corrected: Define PORT inside the async function to ensure it's in scope.
+    // PORT configuration - Azure automatically provides PORT at runtime
     const PORT = process.env.PORT || 8080;
+    console.log(`🔧 All environment variables:`, Object.keys(process.env));
+    console.log(`🔧 Environment PORT: ${process.env.PORT}`);
+    console.log(`🔧 Using PORT: ${PORT}`);
+    console.log(`🔧 PORT type: ${typeof PORT}`);
 
     console.log('🔄 Initializing services...');
     
@@ -93,9 +99,24 @@ const startServer = async () => {
         res.status(500).json({ error: 'Internal server error' });
     });
 
+    // Convert PORT to number to ensure it's not a string
+    const portNumber = parseInt(PORT, 10);
+    console.log(`🔧 Final port number: ${portNumber}`);
+
     // Start the server
-    const server = app.listen(PORT, '0.0.0.0', () => {
-        console.log(`🚀 Server is live and listening on port ${PORT}`);
+    const server = app.listen(portNumber, '0.0.0.0', () => {
+        console.log(`🚀 Server is live and listening on port ${portNumber}`);
+        console.log(`🌐 Server URL: http://localhost:${portNumber}`);
+    });
+
+    // Add error handler for server startup
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            console.error(`❌ Port ${portNumber} is already in use. Please choose a different port or stop the process using this port.`);
+        } else {
+            console.error('❌ Server startup error:', err);
+        }
+        process.exit(1);
     });
 
     // --- Graceful Shutdown ---
