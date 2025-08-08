@@ -1,38 +1,28 @@
-// db.js - Handles the connection to the MongoDB database.
-
-// Import the MongoClient class from the mongodb library.
+// backend/db.js
 const { MongoClient } = require('mongodb');
-// Import and configure dotenv to read variables from the .env file.
 require('dotenv').config();
 
-// Retrieve the database connection string from environment variables.
 const connectionString = process.env.COSMOS_DB_CONNECTION_STRING;
-// For local development, allow the app to run without database connection
-let db;
+let db = null;
+let client = null;
 
-/**
- * Asynchronously connects to the MongoDB cluster and initializes the 'db' object.
- * This function is called once when the server starts.
- */
 const connectDB = async () => {
   if (!connectionString) {
-    console.warn('⚠️ COSMOS_DB_CONNECTION_STRING is not defined. Running in local development mode without database.');
-    return;
+    console.warn('⚠️ COSMOS_DB_CONNECTION_STRING not defined. Running without database.');
+    return null;
   }
 
   const maxRetries = 3;
-  const retryDelay = 2000; // 2 seconds
+  const retryDelay = 2000;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`Attempting to connect to Cosmos DB (attempt ${attempt}/${maxRetries})...`);
-      // Await the connection to the MongoDB cluster.
-      const client = new MongoClient(connectionString);
+      client = new MongoClient(connectionString);
       await client.connect();
-      // Get the database object using the name specified in the .env file.
-      db = client.db(process.env.DB_NAME);
+      db = client.db(process.env.DB_NAME || 'scholargy');
       console.log(`✅ Successfully connected to Azure Cosmos DB: ${db.databaseName}`);
-      return;
+      return db;
     } catch (err) {
       console.error(`❌ Cosmos DB connection attempt ${attempt} failed:`, err.message);
       
@@ -41,25 +31,20 @@ const connectDB = async () => {
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       } else {
         console.error('❌ All Cosmos DB connection attempts failed.');
-        throw err;
+        // Don't throw - allow app to run without database
+        return null;
       }
     }
   }
 };
 
-/**
- * Returns the initialized database object.
- * This is a getter function used by other parts of the application to interact with the database.
- * @returns {Db} The MongoDB database instance.
- */
 const getDB = () => {
-  // If the database object hasn't been initialized, return null for local development
+  // Return null instead of throwing if DB not connected
   if (!db) {
-    console.warn('⚠️ Database not initialized. Running in local development mode.');
+    console.warn('⚠️ Database not initialized. Some features may be unavailable.');
     return null;
   }
   return db;
 };
 
-// Export the functions to be used in other files.
 module.exports = { connectDB, getDB };
