@@ -11,14 +11,12 @@ const PORT = process.env.PORT || 8080;
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// Apply rate limiting to all requests
 app.use(limiter);
 
 // Security middleware
@@ -35,40 +33,26 @@ app.use((req, res, next) => {
   next();
 });
 
-// Bot protection - block suspicious requests
+// Bot protection
 app.use((req, res, next) => {
   const userAgent = req.headers['user-agent'] || '';
-  const suspiciousPatterns = [
-    /bot/i,
-    /crawler/i,
-    /spider/i,
-    /scanner/i,
-    /robots/i
-  ];
-  
-  // Block requests with suspicious user agents
+  const suspiciousPatterns = [/bot/i, /crawler/i, /spider/i, /scanner/i, /robots/i];
+
   if (suspiciousPatterns.some(pattern => pattern.test(userAgent))) {
     console.log(`🚫 Blocked suspicious request from: ${userAgent}`);
     return res.status(403).json({ error: 'Access denied' });
   }
-  
-  // Block requests to suspicious paths
-  const suspiciousPaths = [
-    /robots\d+\.txt/i,
-    /\.env/i,
-    /wp-admin/i,
-    /phpmyadmin/i,
-    /admin/i
-  ];
-  
+
+  const suspiciousPaths = [/robots\d+\.txt/i, /\.env/i, /wp-admin/i, /phpmyadmin/i, /admin/i];
   if (suspiciousPaths.some(pattern => pattern.test(req.path))) {
     console.log(`🚫 Blocked suspicious path: ${req.path}`);
     return res.status(404).json({ error: 'Not found' });
   }
-  
+
   next();
 });
 
+// Serve frontend build
 const frontendBuildPath = path.join(__dirname, '..', 'frontend', 'build');
 app.use(express.static(frontendBuildPath));
 
@@ -76,11 +60,11 @@ const startServer = async () => {
   try {
     console.log('🔄 Initializing services...');
 
-    // Validate environment variables
+    // Validate .env variables
     const { validateEnvironment } = require('./utils/envValidation');
     validateEnvironment();
 
-    // Step 1: Connect DB and Cache FIRST
+    // Step 1: Connect DB and Redis
     const { connectDB, getDB } = require('./db');
     const { connectCache, checkRedisHealth } = require('./cache');
 
@@ -93,15 +77,15 @@ const startServer = async () => {
       console.log('✅ Database and cache connected');
     }
 
-    // Step 2: Initialize services (works with or without DB)
+    // Step 2: Initialize services
     const scholarshipService = require('./services/scholarshipService');
     const careerService = require('./services/careerService');
     const userService = require('./services/userService');
-    
+
     await scholarshipService.initialize();
     await careerService.initialize();
     await userService.initialize();
-    
+
     console.log('✅ All services initialized');
 
     // Step 3: Load API routes
@@ -117,19 +101,18 @@ const startServer = async () => {
     app.use('/api/user', require('./routes/user'));
     app.use('/api/report', require('./routes/report'));
     app.use('/api/forecaster', require('./routes/forecaster'));
-    
-    // StudentVue routes without /api prefix
+
+    // Non-API route for StudentVue (no /api prefix)
     const studentVueRoutes = require('./routes/StudentVue');
     app.use(studentVueRoutes);
-    
+
     console.log('✅ All API routes configured');
 
-    // Health check endpoint
+    // Health check
     app.get('/health', async (req, res) => {
       try {
         const redisHealth = await checkRedisHealth();
         const dbStatus = getDB() ? 'connected' : 'disconnected';
-        
         res.json({
           status: 'healthy',
           timestamp: new Date().toISOString(),
@@ -149,7 +132,7 @@ const startServer = async () => {
       }
     });
 
-    // React fallback route
+    // Serve React frontend
     app.get('*', (req, res) => {
       const indexPath = path.join(frontendBuildPath, 'index.html');
       if (fs.existsSync(indexPath)) {
@@ -162,7 +145,20 @@ const startServer = async () => {
       }
     });
 
-    // Start the server
+    // ✅ Centralized express error handler
+    app.use((err, req, res, next) => {
+      console.error('❌ Express Route Error:', err.stack || err);
+      res.status(500).json({ error: 'Internal server error' });
+    });
+
+    // ✅ Redis error logging
+    if (global.redisClient && global.redisClient.on) {
+      global.redisClient.on('error', (err) => {
+        console.error('❌ Redis Client Error:', err);
+      });
+    }
+
+    // Start server
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server is live on port ${PORT}`);
     });
@@ -183,6 +179,7 @@ const startServer = async () => {
   }
 };
 
+// Node-level error handling
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
   process.exit(1);
