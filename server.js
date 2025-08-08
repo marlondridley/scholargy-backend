@@ -73,7 +73,8 @@ const frontendBuildPath = process.env.NODE_ENV === 'production'
   ? path.join(__dirname, 'public')  // Azure deployment path
   : path.join(__dirname, '..', 'frontend', 'build');  // Local development path
 
-console.log(`📁 Serving static files from: ${frontendBuildPath}`);app.use(express.static(frontendBuildPath));
+console.log(`📁 Serving static files from: ${frontendBuildPath}`);
+app.use(express.static(frontendBuildPath));
 
 const startServer = async () => {
   try {
