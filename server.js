@@ -27,13 +27,12 @@ const startServer = async () => {
     await connectCache();
 
     if (!db) {
-      console.error('❌ Fatal: Database connection failed. Exiting.');
-      process.exit(1);
+      console.warn('⚠️ Database connection failed, but continuing with mock data...');
+    } else {
+      console.log('✅ Database and cache connected');
     }
 
-    console.log('✅ Database and cache connected');
-
-    // Step 2: Initialize services (only after DB is ready)
+    // Step 2: Initialize services (works with or without DB)
     const scholarshipService = require('./services/scholarshipService');
     await scholarshipService.initialize();
 
