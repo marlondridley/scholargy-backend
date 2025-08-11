@@ -1,0 +1,27 @@
+name: Deploy backend-temp to ASE
+
+on:
+  push:
+    branches:
+      - main  # or your backend branch
+
+env:
+  ASE_APP_NAME: scholargy-dz3lcl3szkm74   # Your ASE app name
+  ASE_RESOURCE_GROUP: scholargy_group     # Your ASE resource group
+  ASE_PACKAGE_PATH: backend-temp           # Path to backend code
+
+jobs:
+  deploy_backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Azure App Service Environment
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.ASE_APP_NAME }}
+          slot-name: production
+          resource-group: ${{ env.ASE_RESOURCE_GROUP }}
+          publish-profile: ${{ secrets.ASE_PUBLISH_PROFILE }}
+          package: ${{ env.ASE_PACKAGE_PATH }}
