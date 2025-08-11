@@ -21,12 +21,11 @@ jobs:
           node-version: 22
 
       - name: Install backend dependencies
-        # This command will now run in the root of the repository, where your package.json is.
         run: npm ci
 
       - name: Zip backend for deployment
-        # This command zips all files in the current directory.
-        run: zip -r backend.zip .
+        # This command now excludes development folders to create a clean package for Azure.
+        run: zip -r backend.zip . -x ".git/*" ".github/*"
 
       - name: Deploy to Azure App Service Environment
         uses: azure/webapps-deploy@v2
