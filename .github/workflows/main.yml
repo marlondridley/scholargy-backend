@@ -21,10 +21,11 @@ jobs:
           node-version: 22
 
       - name: Install backend dependencies
+        # This now runs at the root of your repository, which is correct.
         run: npm ci
 
       - name: Zip backend for deployment
-        # This command now excludes development folders to create a clean package for Azure.
+        # This creates a clean zip file of your application for Azure.
         run: zip -r backend.zip . -x ".git/*" ".github/*"
 
       - name: Deploy to Azure App Service Environment
@@ -33,4 +34,6 @@ jobs:
           app-name: ${{ env.ASE_APP_NAME }}
           slot-name: production
           publish-profile: ${{ secrets.ASE_PUBLISH_PROFILE }}
+          # Deploy the zip file you just created.
           package: backend.zip
+          startup-command: 'npm start'
