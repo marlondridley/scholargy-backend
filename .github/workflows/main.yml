@@ -7,8 +7,7 @@ on:
 
 env:
   ASE_APP_NAME: scholargy-dz3lcl3szkm74   # Your ASE app name
-  ASE_RESOURCE_GROUP: scholargy_group     # Your ASE resource group
-  ASE_PACKAGE_PATH: backend-temp           # Path to backend code
+  ASE_PACKAGE_PATH: backend-temp          # Path to backend code
 
 jobs:
   deploy_backend:
@@ -17,11 +16,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install backend dependencies
+        run: |
+          cd ${{ env.ASE_PACKAGE_PATH }}
+          npm ci
+
+      - name: Zip backend for deployment
+        run: |
+          cd ${{ env.ASE_PACKAGE_PATH }}
+          zip -r ../backend.zip .
+
       - name: Deploy to Azure App Service Environment
         uses: azure/webapps-deploy@v2
         with:
           app-name: ${{ env.ASE_APP_NAME }}
           slot-name: production
-          resource-group: ${{ env.ASE_RESOURCE_GROUP }}
           publish-profile: ${{ secrets.ASE_PUBLISH_PROFILE }}
-          package: ${{ env.ASE_PACKAGE_PATH }}
+          package: backend.zip
