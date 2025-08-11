@@ -1,13 +1,12 @@
-name: Deploy backend-temp to ASE
+name: Deploy backend to ASE
 
 on:
   push:
     branches:
-      - main  # or your backend branch
+      - main
 
 env:
-  ASE_APP_NAME: scholargy-dz3lcl3szkm74   # Your ASE app name
-  ASE_PACKAGE_PATH: backend-temp          # Path to backend code
+  ASE_APP_NAME: scholargy-dz3lcl3szkm74
 
 jobs:
   deploy_backend:
@@ -22,14 +21,12 @@ jobs:
           node-version: 22
 
       - name: Install backend dependencies
-        run: |
-          cd ${{ env.ASE_PACKAGE_PATH }}
-          npm ci
+        # This command will now run in the root of the repository, where your package.json is.
+        run: npm ci
 
       - name: Zip backend for deployment
-        run: |
-          cd ${{ env.ASE_PACKAGE_PATH }}
-          zip -r ../backend.zip .
+        # This command zips all files in the current directory.
+        run: zip -r backend.zip .
 
       - name: Deploy to Azure App Service Environment
         uses: azure/webapps-deploy@v2
