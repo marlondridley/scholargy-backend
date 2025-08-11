@@ -1,38 +1,35 @@
-name: Deploy backend to ASE
+name: Deploy Backend to Azure Web App
 
 on:
   push:
     branches:
       - main
 
-env:
-  ASE_APP_NAME: scholargy-dz3lcl3szkm74
-
 jobs:
-  deploy_backend:
+  build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install backend dependencies
-        # This command now runs at the root of your repository, which is correct.
-        run: npm ci
+      - name: Install dependencies
+        run: npm install
+        working-directory: scholargy-backend-temp
 
       - name: Zip backend for deployment
-        # This creates a clean zip file of your application for Azure.
-        run: zip -r backend.zip . -x ".git/*" ".github/*"
+        run: |
+          cd scholargy-backend-temp
+          zip -r ../backend.zip .
 
-      - name: Deploy to Azure App Service Environment
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v2
         with:
-          app-name: ${{ env.ASE_APP_NAME }}
-          slot-name: production
-          publish-profile: ${{ secrets.ASE_PUBLISH_PROFILE }}
-          # Deploy the zip file you just created.
+          app-name: scholargy-dz3lcl3szkm74
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: backend.zip
