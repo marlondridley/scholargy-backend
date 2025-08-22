@@ -73,4 +73,77 @@ ${contextText}
   }
 }
 
-module.exports = { performRagQuery };
+// Get top college matches for a student profile
+async function topMatchesFromProfile(studentProfile) {
+  try {
+    // Mock implementation - replace with actual college matching logic
+    const mockMatches = [
+      {
+        unitid: 243744,
+        name: "Stanford University",
+        logo: "https://example.com/stanford-logo.png",
+        netCost: 25000,
+        likelihood: "reach",
+        details: "Highly selective university with strong STEM programs",
+        admissionRate: 0.04,
+        tuition: 55000
+      },
+      {
+        unitid: 236948,
+        name: "University of Washington",
+        logo: "https://example.com/uw-logo.png",
+        likelihood: "target",
+        netCost: 18000,
+        admissionRate: 0.52,
+        tuition: 38000
+      },
+      {
+        unitid: 104151,
+        name: "Arizona State University",
+        logo: "https://example.com/asu-logo.png",
+        likelihood: "safety",
+        netCost: 15000,
+        admissionRate: 0.88,
+        tuition: 29000
+      }
+    ];
+
+    return mockMatches;
+  } catch (error) {
+    console.error('Error getting top matches:', error);
+    throw new Error('Failed to get top college matches');
+  }
+}
+
+// Get scholarship summary for a student profile
+async function scholarshipSummaryFromProfile(studentProfile, scholarshipRecommendations = []) {
+  try {
+    // Mock implementation - replace with actual scholarship analysis
+    const summary = {
+      totalScholarships: 45,
+      totalValue: 125000,
+      categories: [
+        { name: 'Academic Merit', count: 15, value: 45000 },
+        { name: 'Need-Based', count: 12, value: 35000 },
+        { name: 'Minority Students', count: 8, value: 25000 },
+        { name: 'STEM', count: 10, value: 20000 }
+      ],
+      topRecommendations: [
+        { name: 'National Merit Scholarship', value: 2500, deadline: '2025-10-01' },
+        { name: 'Gates Millennium Scholars', value: 50000, deadline: '2025-01-15' }
+      ],
+      analysis: `Based on your profile with a ${studentProfile.gpa || 3.5} GPA and ${studentProfile.major || 'undecided'} major, you have strong eligibility for academic merit scholarships. Consider focusing on STEM-specific opportunities if pursuing a technical field.`
+    };
+
+    return summary;
+  } catch (error) {
+    console.error('Error generating scholarship summary:', error);
+    throw new Error('Failed to generate scholarship summary');
+  }
+}
+
+module.exports = { 
+  performRagQuery, 
+  topMatchesFromProfile, 
+  scholarshipSummaryFromProfile 
+};

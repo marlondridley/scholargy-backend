@@ -101,6 +101,7 @@ const startServer = async () => {
 
     // --- API Routes ---
     app.use('/api/articles', require('./routes/articles'));
+    app.use('/api/dashboard', require('./routes/dashboard'));
     app.use('/api/institutions', require('./routes/institutions'));
     app.use('/api/probability', require('./routes/probability'));
     app.use('/api/rag', require('./routes/rag'));

@@ -99,4 +99,36 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+/**
+ * @route   POST /api/institutions/batch
+ * @desc    Retrieves multiple institutions by their unit IDs.
+ * @access  Public
+ */
+router.post('/batch', async (req, res) => {
+    const { unitIds } = req.body;
+    if (!unitIds || !Array.isArray(unitIds)) {
+        return res.status(400).json({ error: 'unitIds array is required.' });
+    }
+    try {
+        const db = getDB();
+        if (!db) {
+            return res.status(503).json({ error: 'Database service unavailable' });
+        }
+        
+        const numericIds = unitIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+        if (numericIds.length === 0) {
+            return res.status(400).json({ error: 'No valid unit IDs provided.' });
+        }
+        
+        const institutions = await db.collection('ipeds_colleges').find({
+            unitid: { $in: numericIds }
+        }).toArray();
+        
+        res.json({ institutions });
+    } catch (error) {
+        console.error('Error fetching institutions by IDs:', error);
+        res.status(500).json({ error: 'Failed to fetch institutions by IDs.' });
+    }
+});
+
 module.exports = router;

@@ -20,7 +20,7 @@ const connectDB = async () => {
       console.log(`Attempting to connect to Cosmos DB (attempt ${attempt}/${maxRetries})...`);
       client = new MongoClient(connectionString);
       await client.connect();
-      db = client.db(process.env.DB_NAME || 'scholargy');
+      db = client.db(process.env.DB_NAME || 'scholargyvectordb');
       console.log(`✅ Successfully connected to Azure Cosmos DB: ${db.databaseName}`);
       return db;
     } catch (err) {
