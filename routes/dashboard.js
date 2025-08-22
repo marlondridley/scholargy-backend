@@ -144,10 +144,10 @@ router.get('/upcoming-deadlines', async (req, res) => {
 
 /**
  * POST /api/dashboard/next-steps
- * Body: { studentProfile, collegeMatches, scholarships }   (frontend can pass, or provide userId)
+ * Body: { studentProfile, collegeMatches, scholarships, userId } (frontend can pass, or provide userId)
  *
  * Response:
- * { nextSteps: [ { task: "..." }, ... ] }
+ * { nextSteps: [ { task: "...", priority: "high|medium|low", dueDate: "..." }, ... ] }
  */
 router.post('/next-steps', async (req, res) => {
   try {
@@ -158,7 +158,7 @@ router.post('/next-steps', async (req, res) => {
     
     let { studentProfile, collegeMatches, scholarships, userId } = req.body;
 
-    // If userId provided but studentProfile missing, fetch profile
+    // If userId provided but studentProfile missing, fetch profile from user_applications
     if (!studentProfile && userId) {
       const userDoc = await db.collection('user_applications').findOne({ userId });
       studentProfile = userDoc || null;
@@ -174,20 +174,187 @@ router.post('/next-steps', async (req, res) => {
     }
     collegeMatches = collegeMatches || [];
 
-    // If scholarships not provided, fetch top 5 scholarships for context
-    if (!scholarships) {
-      const docs = await db.collection('scholarships').find({}).sort({ amount: -1 }).limit(5).toArray();
-      scholarships = docs.map(d => ({ title: d.title, amount: d.amount, deadline: d.deadline }));
+    // Enhance college matches with additional details from ipeds_colleges
+    if (collegeMatches.length > 0) {
+      const collegeIds = collegeMatches.map(college => college.unitid || college._id).filter(Boolean);
+      if (collegeIds.length > 0) {
+        const enhancedColleges = await db.collection('ipeds_colleges')
+          .find({ unitid: { $in: collegeIds } })
+          .toArray();
+        
+        // Merge enhanced data with existing college matches
+        collegeMatches = collegeMatches.map(college => {
+          const enhanced = enhancedColleges.find(ec => ec.unitid === college.unitid);
+          if (enhanced) {
+            return {
+              ...college,
+              // Add detailed college information
+              admission_rate: enhanced.admissions?.admission_rate,
+              graduation_rate: enhanced.graduation?.overall_rate,
+              enrollment_total: enhanced.enrollment?.total,
+              popular_majors: enhanced.academics?.popular_majors || [],
+              tuition_in_state: enhanced.cost_and_aid?.tuition_in_state,
+              tuition_out_of_state: enhanced.cost_and_aid?.tuition_out_of_state,
+              room_board: enhanced.cost_and_aid?.room_board,
+              sat_scores: enhanced.admissions?.sat_scores,
+              act_scores: enhanced.admissions?.act_scores,
+              location: enhanced.general_info ? {
+                city: enhanced.general_info.city,
+                state: enhanced.general_info.state,
+                region: enhanced.general_info.region
+              } : null
+            };
+          }
+          return college;
+        });
+      }
     }
 
-    // Use the getNextSteps service
-    const nextSteps = await getNextSteps(studentProfile, collegeMatches, scholarships);
+    // If scholarships not provided, fetch comprehensive scholarship data
+    if (!scholarships) {
+      const gpa = studentProfile ? parseGpa(studentProfile.gpa) : null;
+      
+      // Build scholarship filter based on student profile
+      let filter = {};
+      if (gpa != null) {
+        filter = { $or: [{ 'eligibility.minGPA': { $lte: gpa } }, { 'eligibility.minGPA': { $exists: false } }] };
+      }
+      
+      // Add other eligibility filters if available
+      if (studentProfile.major || studentProfile.career_goals) {
+        const majorKeywords = [studentProfile.major, studentProfile.career_goals].filter(Boolean);
+        if (majorKeywords.length > 0) {
+          filter.$or = filter.$or || [];
+          filter.$or.push({
+            $or: majorKeywords.map(keyword => ({
+              $or: [
+                { title: { $regex: keyword, $options: 'i' } },
+                { description: { $regex: keyword, $options: 'i' } },
+                { 'eligibility.majors': { $regex: keyword, $options: 'i' } }
+              ]
+            }))
+          });
+        }
+      }
+
+      const scholarshipDocs = await db.collection('scholarships')
+        .find(filter)
+        .sort({ amount: -1 })
+        .limit(10)
+        .toArray();
+      
+      scholarships = scholarshipDocs.map(d => ({
+        title: d.title,
+        amount: d.amount || 0,
+        deadline: d.deadline ? new Date(d.deadline).toISOString().slice(0, 10) : null,
+        description: d.description || '',
+        eligibility: d.eligibility || {},
+        application_requirements: d.application_requirements || [],
+        url: d.url || null,
+        category: d.category || 'General'
+      }));
+    }
+
+    // Add contextual information for better AI analysis
+    const context = {
+      currentDate: new Date().toISOString().slice(0, 10),
+      applicationSeason: getApplicationSeason(),
+      financialAidDeadlines: getFinancialAidDeadlines(),
+      testDates: getUpcomingTestDates()
+    };
+
+    // Enhanced student profile with calculated metrics
+    const enhancedProfile = {
+      ...studentProfile,
+      academicMetrics: calculateAcademicMetrics(studentProfile),
+      financialNeed: assessFinancialNeed(studentProfile),
+      applicationReadiness: assessApplicationReadiness(studentProfile)
+    };
+
+    // Use the enhanced getNextSteps service with comprehensive context
+    const nextSteps = await getNextSteps(enhancedProfile, collegeMatches, scholarships);
     
-    res.json({ nextSteps });
+    res.json({ 
+      nextSteps,
+      context: {
+        totalScholarshipAmount: scholarships.reduce((sum, s) => sum + (s.amount || 0), 0),
+        scholarshipCount: scholarships.length,
+        collegeCount: collegeMatches.length,
+        applicationSeason: context.applicationSeason
+      }
+    });
   } catch (err) {
     console.error('POST /api/dashboard/next-steps error', err);
     res.status(500).json({ error: 'Failed to generate next steps' });
   }
 });
+
+// Helper functions for enhanced context
+function getApplicationSeason() {
+  const month = new Date().getMonth() + 1;
+  if (month >= 9 && month <= 12) return 'Early Decision/Early Action';
+  if (month >= 1 && month <= 3) return 'Regular Decision';
+  if (month >= 4 && month <= 8) return 'Summer Planning';
+  return 'General Application';
+}
+
+function getFinancialAidDeadlines() {
+  const currentYear = new Date().getFullYear();
+  return {
+    fafsa: `${currentYear}-10-01`,
+    css: `${currentYear}-10-01`,
+    stateAid: `${currentYear}-03-01`
+  };
+}
+
+function getUpcomingTestDates() {
+  const currentYear = new Date().getFullYear();
+  return {
+    sat: [`${currentYear}-10-05`, `${currentYear}-11-02`, `${currentYear}-12-07`],
+    act: [`${currentYear}-10-26`, `${currentYear}-12-14`]
+  };
+}
+
+function calculateAcademicMetrics(profile) {
+  if (!profile) return {};
+  
+  const gpa = parseGpa(profile.gpa);
+  const sat = profile.satScore ? parseInt(profile.satScore) : null;
+  
+  return {
+    gpaPercentile: gpa ? Math.min(Math.round((gpa / 4.0) * 100), 100) : null,
+    satPercentile: sat ? Math.min(Math.round((sat / 1600) * 100), 100) : null,
+    academicStrength: gpa >= 3.8 ? 'Excellent' : gpa >= 3.5 ? 'Strong' : gpa >= 3.0 ? 'Good' : 'Needs Improvement',
+    testReadiness: sat >= 1400 ? 'Excellent' : sat >= 1200 ? 'Good' : sat >= 1000 ? 'Fair' : 'Needs Preparation'
+  };
+}
+
+function assessFinancialNeed(profile) {
+  if (!profile) return 'Unknown';
+  
+  const familyIncome = profile.familyIncome ? parseInt(profile.familyIncome) : null;
+  if (!familyIncome) return 'Unknown';
+  
+  if (familyIncome < 50000) return 'High Need';
+  if (familyIncome < 100000) return 'Moderate Need';
+  return 'Low Need';
+}
+
+function assessApplicationReadiness(profile) {
+  if (!profile) return 'Incomplete';
+  
+  const requiredFields = ['gpa', 'satScore', 'gradeLevel', 'extracurriculars', 'career_goals'];
+  const completedFields = requiredFields.filter(field => {
+    const value = profile[field];
+    return value && value.toString().trim() !== '' && value !== 'N/A';
+  });
+  
+  const completionPercentage = Math.round((completedFields.length / requiredFields.length) * 100);
+  
+  if (completionPercentage >= 80) return 'Ready';
+  if (completionPercentage >= 60) return 'Nearly Ready';
+  if (completionPercentage >= 40) return 'In Progress';
+  return 'Needs Work';
+}
 
 module.exports = router;
