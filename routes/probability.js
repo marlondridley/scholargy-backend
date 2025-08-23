@@ -9,6 +9,7 @@ const router = express.Router();
 const calculateProbability = (studentProfile, collegeStats) => {
     let score = 0;
     let maxScore = 0;
+    let penaltyMultiplier = 1.0;
 
     // GPA comparison (40% weight)
     if (collegeStats.avgGPA && studentProfile.gpa) {
@@ -19,7 +20,11 @@ const calculateProbability = (studentProfile, collegeStats) => {
         else if (gpaDiff >= 0) score += 30;
         else if (gpaDiff >= -0.2) score += 20;
         else if (gpaDiff >= -0.5) score += 10;
-        else score += 5;
+        else {
+            score += 5;
+            // Apply penalty for very poor GPA (more than 0.5 below average)
+            penaltyMultiplier *= 0.6; // 40% penalty
+        }
     }
 
     // SAT comparison (40% weight)
@@ -31,23 +36,42 @@ const calculateProbability = (studentProfile, collegeStats) => {
         else if (satDiff >= 0) score += 30;
         else if (satDiff >= -50) score += 20;
         else if (satDiff >= -100) score += 10;
-        else score += 5;
+        else {
+            score += 5;
+            // Apply penalty for very poor SAT (more than 100 below 75th percentile)
+            penaltyMultiplier *= 0.6; // 40% penalty
+        }
     }
 
     // Extracurriculars (20% weight)
-    if (studentProfile.extracurricularStrength) {
+    if (studentProfile.extracurricularStrength && 
+        typeof studentProfile.extracurricularStrength === 'number' && 
+        studentProfile.extracurricularStrength >= 1 && 
+        studentProfile.extracurricularStrength <= 5) {
+        
         maxScore += 20;
-        score += studentProfile.extracurricularStrength * 4; // 1-5 scale
+        const extracurricularScore = studentProfile.extracurricularStrength * 4; // 1-5 scale
+        score += extracurricularScore;
+        
+        // Apply penalty for weak extracurriculars (strength 1-2)
+        if (studentProfile.extracurricularStrength <= 2) {
+            penaltyMultiplier *= 0.8; // 20% penalty
+        }
     }
+
+    // Calculate base probability
+    let baseProb = maxScore > 0 ? score / maxScore : 0.5;
+    
+    // Apply penalty multiplier for weak metrics
+    baseProb *= penaltyMultiplier;
 
     // If admission rate is available, factor it in
     if (collegeStats.admissionRate && maxScore > 0) {
-        const baseProb = score / maxScore;
         // Adjust based on selectivity
         return Math.min(baseProb * (collegeStats.admissionRate * 2), 0.95);
     }
 
-    return maxScore > 0 ? score / maxScore : 0.5;
+    return baseProb;
 };
 
 /**
