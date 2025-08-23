@@ -23,7 +23,14 @@ router.get('/search', async (req, res) => {
     }
     try {
         const searchResults = await searchClient.search(q, { includeTotalCount: true });
-        res.json(searchResults);
+
+        // searchResults is a PagedAsyncIterableIterator which isn't directly JSON serializable
+        const results = [];
+        for await (const result of searchResults) {
+            results.push(result);
+        }
+
+        res.json({ count: searchResults.count ?? results.length, results });
     } catch (error) {
         console.error("Error searching articles:", error);
         res.status(500).send("Server Error");

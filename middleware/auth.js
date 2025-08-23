@@ -6,7 +6,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 let supabase = null;
 
-// Only initialize Supabase if we're in production or have proper credentials
+// Initialize Supabase client whenever proper credentials are available
 const isProduction = process.env.NODE_ENV === 'production';
 const hasSupabaseConfig = supabaseUrl && supabaseServiceKey;
 

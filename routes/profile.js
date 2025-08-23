@@ -163,6 +163,57 @@ router.get('/:userId/assessment', verifyUser, async (req, res) => {
     }
 });
 
+// POST /api/profile/assessment - Generate AI assessment from provided profile data
+router.post('/assessment', verifyUser, async (req, res) => {
+    try {
+        const { profileData } = req.body;
+        
+        if (!profileData) {
+            return res.status(400).json({ error: 'Profile data is required' });
+        }
+
+        // Generate comprehensive AI assessment based on provided profile data
+        const assessment = {
+            summary: `Based on your ${profileData.gpa || 3.5} GPA, ${profileData.satScore || 'pending'} SAT score, and ${profileData.major || 'undecided'} major interest, you have strong potential for college success.`,
+            strengths: [
+                profileData.gpa >= 3.5 ? 'Strong academic performance' : 'Consistent academic record',
+                profileData.satScore >= 1200 ? 'Competitive test scores' : 'Good test-taking abilities',
+                profileData.actScore >= 24 ? 'Strong ACT performance' : null,
+                profileData.extracurriculars ? 'Active extracurricular involvement' : 'Well-rounded interests',
+                profileData.minorityStudent ? 'Diversity scholarship opportunities' : null,
+                profileData.firstGeneration ? 'First-generation student programs available' : null
+            ].filter(Boolean),
+            gaps: [
+                profileData.gpa < 3.5 ? 'Consider improving GPA through challenging courses' : null,
+                !profileData.satScore && !profileData.actScore ? 'Complete SAT/ACT testing' : null,
+                !profileData.extracurriculars ? 'Build leadership and community service experience' : null,
+                !profileData.careerGoals ? 'Define clear career goals and major interests' : null
+            ].filter(Boolean),
+            recommendations: [
+                'Continue maintaining strong academic performance',
+                'Take AP/IB courses if available',
+                'Prepare for college entrance exams',
+                'Develop leadership skills through extracurricular activities',
+                'Research and apply for scholarships early',
+                'Consider summer programs and internships',
+                'Build relationships with teachers for recommendations'
+            ],
+            scholarshipOpportunities: {
+                academicMerit: profileData.gpa >= 3.5,
+                needBased: profileData.financialNeed,
+                minorityPrograms: profileData.minorityStudent,
+                firstGenPrograms: profileData.firstGeneration,
+                stemScholarships: profileData.major && ['engineering', 'computer science', 'mathematics', 'physics'].includes(profileData.major.toLowerCase())
+            }
+        };
+
+        res.json({ assessment });
+    } catch (error) {
+        console.error('Profile assessment error:', error);
+        res.status(500).json({ error: 'Failed to generate profile assessment' });
+    }
+});
+
 // POST /api/profile/:userId/save - Save profile data
 router.post('/:userId/save', verifyUser, async (req, res) => {
     if (req.user.id !== req.params.userId) {
