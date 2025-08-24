@@ -1,9 +1,13 @@
 // backend/utils/envValidation.js
 const validateEnvironment = () => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    
     const requiredVars = {
-        // Supabase Configuration
-        SUPABASE_URL: process.env.SUPABASE_URL,
-        SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        // Supabase Configuration (enforced only in production)
+        ...(isProduction && {
+            SUPABASE_URL: process.env.SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        }),
         
         // Database Configuration
         COSMOS_DB_CONNECTION_STRING: process.env.COSMOS_DB_CONNECTION_STRING,
@@ -37,6 +41,13 @@ const validateEnvironment = () => {
     if (warnings.length > 0) {
         console.warn('⚠️ Environment warnings:');
         warnings.forEach(warning => console.warn(`   ${warning}`));
+    }
+
+    // Log production-specific information
+    if (isProduction) {
+        console.log('🏭 Production mode: Supabase authentication is required');
+    } else {
+        console.log('🔧 Development mode: Supabase authentication is optional');
     }
 
     // Throw error for missing required variables

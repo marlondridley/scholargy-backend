@@ -31,6 +31,10 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Request logging middleware for debugging and monitoring
+const { requestLogger } = require('./middleware/requestLogger');
+app.use(requestLogger);
+
 // Enable Cross-Origin Resource Sharing (CORS) for all routes.
 app.use(cors());
 // Parse JSON and URL-encoded request bodies with a 10mb limit.
