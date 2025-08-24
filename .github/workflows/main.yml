@@ -8,10 +8,9 @@ on:
       - main
 
 env:
-  # Your specific application details
   AZURE_WEBAPP_NAME: 'scholargy-dz3lcl3szkm74'
-  AZURE_WEBAPP_PACKAGE_PATH: '.' # Use '.' because the app is in the root of this repo
-  NODE_VERSION: '22.x'           # Current Node.js LTS version
+  AZURE_WEBAPP_PACKAGE_PATH: '.'
+  NODE_VERSION: '20.x'
 
 jobs:
   build-and-deploy:
@@ -28,18 +27,21 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      # This combined step follows the Microsoft template structure correctly
-      - name: Install, Build, and Test
-        run: |
-          npm install
-          npm run build --if-present
-          npm run test --if-present
+      - name: Install Dependencies
+        run: npm ci
+        working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+
+      - name: Run Tests
+        run: npm test --if-present
+        working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+
+      - name: Build (optional)
+        run: npm run build --if-present
         working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          # Ensure your GitHub secret is named AZURE_PUBLISH_PROFILE
           publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
           package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
